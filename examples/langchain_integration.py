@@ -5,8 +5,9 @@ for LangChain chains, providing persistent, searchable context.
 """
 
 import asyncio
-import sys
 import os
+import sys
+from typing import Any
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -95,9 +96,9 @@ async def main():
     print("\n--- Method 3: With LangChain Chain ---\n")
 
     try:
+        from langchain.callbacks import AsyncCallbackHandler
         from langchain.chains import ConversationChain
         from langchain.llms import OpenAI
-        from langchain.callbacks import AsyncCallbackHandler
 
         class ContexoCallbackHandler(AsyncCallbackHandler):
             """Callback to track provenance in LangChain."""
@@ -105,15 +106,13 @@ async def main():
             def __init__(self, contexo_instance: Contexo):
                 self.contexo = contexo_instance
 
-            async def on_llm_start(
-                self, prompts: list[str], **kwargs: Any
-            ) -> Any:
+            async def on_llm_start(self, prompts: list[str], **kwargs: Any) -> Any:
                 """Called when LLM starts processing."""
                 print(f"[Contexo] LLM processing with context length: {len(prompts[0])} chars")
 
             async def on_llm_end(self, response: Any, **kwargs: Any) -> Any:
                 """Called when LLM finishes."""
-                print(f"[Contexo] LLM response received")
+                print("[Contexo] LLM response received")
 
         # Create a simple chain with Contexo memory
         llm = OpenAI(temperature=0.7, openai_api_key=os.getenv("OPENAI_API_KEY"))

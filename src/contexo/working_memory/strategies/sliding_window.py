@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contexo.core.memory import MemoryEntry
-from contexo.working_memory.strategies.base import CompactionStrategy, PassthroughStrategy
+from contexo.working_memory.strategies.base import PassthroughStrategy
 
 
 class SlidingWindowStrategy(PassthroughStrategy):

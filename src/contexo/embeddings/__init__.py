@@ -18,7 +18,10 @@ except ImportError:
         """Placeholder when OpenAI is not available."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            raise ImportError("openai is required for OpenAI embeddings. Install with: pip install openai")
+            raise ImportError(
+                "openai is required for OpenAI embeddings. Install with: pip install openai"
+            )
+
 
 try:
     from contexo.embeddings.sentence_transformers import (
@@ -60,14 +63,15 @@ def create_embedding_provider(provider_type: str, **kwargs: Any) -> EmbeddingPro
         # MockEmbeddings only uses dimension and model_name
         # Filter out None values to use defaults
         mock_kwargs = {
-            k: v for k, v in kwargs.items()
-            if k in ("dimension", "model_name") and v is not None
+            k: v for k, v in kwargs.items() if k in ("dimension", "model_name") and v is not None
         }
         return MockEmbeddings(**mock_kwargs)
 
     if provider_type == "openai":
         if not _openai_available:
-            raise ImportError("openai is required for OpenAI embeddings. Install with: pip install openai")
+            raise ImportError(
+                "openai is required for OpenAI embeddings. Install with: pip install openai"
+            )
         return OpenAIEmbeddings(**kwargs)
 
     if provider_type in ("sentence_transformers", "sentencetransformers"):

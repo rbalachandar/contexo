@@ -125,7 +125,12 @@ class SummarizationStrategy(CompactionStrategy):
         if len(text) <= max_chars:
             return text
 
-        return text[: max_chars - 30] + "... [truncated, " + str(len(text) - max_chars + 30) + " chars omitted]"
+        return (
+            text[: max_chars - 30]
+            + "... [truncated, "
+            + str(len(text) - max_chars + 30)
+            + " chars omitted]"
+        )
 
 
 class LLMSummarizationStrategy(SummarizationStrategy):

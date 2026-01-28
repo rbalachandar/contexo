@@ -45,8 +45,7 @@ class SQLiteStorage(StorageBackend):
         await self._conn.execute("PRAGMA foreign_keys = ON")
 
         # Create main entries table
-        await self._conn.execute(
-            """
+        await self._conn.execute("""
             CREATE TABLE IF NOT EXISTS entries (
                 id TEXT PRIMARY KEY,
                 entry_type TEXT NOT NULL,
@@ -60,46 +59,37 @@ class SQLiteStorage(StorageBackend):
                 conversation_id TEXT,
                 FOREIGN KEY (parent_id) REFERENCES entries(id) ON DELETE SET NULL
             )
-            """
-        )
+            """)
 
         # Create FTS5 virtual table for full-text search
-        await self._conn.execute(
-            """
+        await self._conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
                 id, content, metadata,
                 content='entries',
                 content_rowid='rowid'
             )
-            """
-        )
+            """)
 
         # Create triggers to keep FTS index updated
-        await self._conn.execute(
-            """
+        await self._conn.execute("""
             CREATE TRIGGER IF NOT EXISTS entries_ai AFTER INSERT ON entries BEGIN
                 INSERT INTO entries_fts(rowid, id, content, metadata)
                 VALUES (new.rowid, new.id, new.content, new.metadata);
             END
-            """
-        )
+            """)
 
-        await self._conn.execute(
-            """
+        await self._conn.execute("""
             CREATE TRIGGER IF NOT EXISTS entries_ad AFTER DELETE ON entries BEGIN
                 DELETE FROM entries_fts WHERE rowid = old.rowid;
             END
-            """
-        )
+            """)
 
-        await self._conn.execute(
-            """
+        await self._conn.execute("""
             CREATE TRIGGER IF NOT EXISTS entries_au AFTER UPDATE ON entries BEGIN
                 UPDATE entries_fts SET content = new.content, metadata = new.metadata
                 WHERE rowid = new.rowid;
             END
-            """
-        )
+            """)
 
         # Create indexes for common queries
         await self._conn.execute(

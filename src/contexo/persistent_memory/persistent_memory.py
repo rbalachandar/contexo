@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from contexo.core.exceptions import StorageError
 from contexo.core.memory import EntryType, MemoryEntry, MemoryManager
 from contexo.embeddings.base import EmbeddingProvider
 from contexo.embeddings.mock import MockEmbeddings
@@ -392,9 +391,9 @@ class PersistentMemory(MemoryManager):
 
         entries = await self._storage.list_entries()
         children = [
-            e for e in entries
-            if e.parent_id == entry_id
-            and (entry_type is None or e.entry_type == entry_type)
+            e
+            for e in entries
+            if e.parent_id == entry_id and (entry_type is None or e.entry_type == entry_type)
         ]
         return children
 

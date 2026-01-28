@@ -17,7 +17,7 @@ from contexo.core.memory import EntryType, MemoryEntry
 from contexo.storage.base import SearchQuery, SearchResult, StorageBackend
 
 try:
-    from neo4j import AsyncGraphDatabase, AsyncDriver
+    from neo4j import AsyncDriver, AsyncGraphDatabase
 
     _neo4j_available = True
 except ImportError:
@@ -76,8 +76,7 @@ class GraphDBStorage(StorageBackend):
         """
         if not _neo4j_available:
             raise ImportError(
-                "neo4j is required for GraphDB storage. "
-                "Install with: pip install neo4j"
+                "neo4j is required for GraphDB storage. " "Install with: pip install neo4j"
             )
 
         self._uri = uri
@@ -99,8 +98,7 @@ class GraphDBStorage(StorageBackend):
 
         # Create constraints for unique IDs
         await self._execute_query(
-            "CREATE CONSTRAINT entry_id IF NOT EXISTS "
-            "FOR (e:MemoryEntry) REQUIRE e.id IS UNIQUE"
+            "CREATE CONSTRAINT entry_id IF NOT EXISTS " "FOR (e:MemoryEntry) REQUIRE e.id IS UNIQUE"
         )
 
         # Create indexes for common queries
@@ -110,13 +108,11 @@ class GraphDBStorage(StorageBackend):
         )
 
         await self._execute_query(
-            "CREATE INDEX entry_entry_type IF NOT EXISTS "
-            "FOR (e:MemoryEntry) ON (e.entry_type)"
+            "CREATE INDEX entry_entry_type IF NOT EXISTS " "FOR (e:MemoryEntry) ON (e.entry_type)"
         )
 
         await self._execute_query(
-            "CREATE INDEX entry_timestamp IF NOT EXISTS "
-            "FOR (e:MemoryEntry) ON (e.timestamp)"
+            "CREATE INDEX entry_timestamp IF NOT EXISTS " "FOR (e:MemoryEntry) ON (e.timestamp)"
         )
 
         self._initialized = True
@@ -226,7 +222,11 @@ class GraphDBStorage(StorageBackend):
             LIMIT 1
             MERGE (e)-[:FOLLOWS]->(prev)
             """,
-            {"id": entry.id, "conversation_id": entry.conversation_id, "timestamp": entry.timestamp},
+            {
+                "id": entry.id,
+                "conversation_id": entry.conversation_id,
+                "timestamp": entry.timestamp,
+            },
         )
 
     async def load(self, entry_id: str) -> MemoryEntry | None:
@@ -598,8 +598,7 @@ class GraphDBStorage(StorageBackend):
         )
 
         return [
-            (self._record_to_entry(r["related"]), r["relation_type"], r["score"])
-            for r in result
+            (self._record_to_entry(r["related"]), r["relation_type"], r["score"]) for r in result
         ]
 
     async def find_entities(
@@ -788,11 +787,13 @@ class GraphDBStorage(StorageBackend):
                 parent = self._record_to_entry(parent_result[0]["parent"])
                 result["parent"] = parent
                 result["relationship_graph"]["nodes"].append(parent.id)
-                result["relationship_graph"]["edges"].append({
-                    "from": parent.id,
-                    "to": entry_id,
-                    "type": "PARENT",
-                })
+                result["relationship_graph"]["edges"].append(
+                    {
+                        "from": parent.id,
+                        "to": entry_id,
+                        "type": "PARENT",
+                    }
+                )
 
         # Get children (entries that have this as parent)
         if include_children:
@@ -806,11 +807,13 @@ class GraphDBStorage(StorageBackend):
                 child = self._record_to_entry(record["child"])
                 result["children"].append(child)
                 result["relationship_graph"]["nodes"].append(child.id)
-                result["relationship_graph"]["edges"].append({
-                    "from": entry_id,
-                    "to": child.id,
-                    "type": "PARENT",
-                })
+                result["relationship_graph"]["edges"].append(
+                    {
+                        "from": entry_id,
+                        "to": child.id,
+                        "type": "PARENT",
+                    }
+                )
 
         # Get conversation context
         if include_conversation:
@@ -824,11 +827,13 @@ class GraphDBStorage(StorageBackend):
             for entry in context_entries:
                 if entry.id != entry_id and entry.id not in result["relationship_graph"]["nodes"]:
                     result["relationship_graph"]["nodes"].append(entry.id)
-                    result["relationship_graph"]["edges"].append({
-                        "from": entry.id,
-                        "to": entry_id,
-                        "type": "CONVERSATION",
-                    })
+                    result["relationship_graph"]["edges"].append(
+                        {
+                            "from": entry.id,
+                            "to": entry_id,
+                            "type": "CONVERSATION",
+                        }
+                    )
 
         # Get related entries via all relationships
         query = """
@@ -841,18 +846,22 @@ class GraphDBStorage(StorageBackend):
         related_result = await self._execute_query(query, {"entry_id": entry_id})
         for record in related_result:
             related = self._record_to_entry(record["related"])
-            result["related"].append({
-                "entry": related,
-                "relation_type": record["rel_type"],
-                "score": record["score"],
-            })
+            result["related"].append(
+                {
+                    "entry": related,
+                    "relation_type": record["rel_type"],
+                    "score": record["score"],
+                }
+            )
             if related.id not in result["relationship_graph"]["nodes"]:
                 result["relationship_graph"]["nodes"].append(related.id)
-                result["relationship_graph"]["edges"].append({
-                    "from": entry_id,
-                    "to": related.id,
-                    "type": record["rel_type"],
-                })
+                result["relationship_graph"]["edges"].append(
+                    {
+                        "from": entry_id,
+                        "to": related.id,
+                        "type": record["rel_type"],
+                    }
+                )
 
         return result
 

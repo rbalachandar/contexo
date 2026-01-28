@@ -5,12 +5,12 @@ integrates Contexo memory management with any LLM provider.
 """
 
 import asyncio
-import json
-import sys
 import os
+import sys
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, List, Optional, Dict
+from typing import Any
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -24,7 +24,7 @@ class ChatMessage:
 
     role: str
     content: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -32,8 +32,8 @@ class ChatResponse:
     """A chat response from the LLM."""
 
     content: str
-    metadata: Optional[Dict[str, Any]] = None
-    usage: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None
 
 
 class LLMProvider(ABC):
@@ -42,7 +42,7 @@ class LLMProvider(ABC):
     @abstractmethod
     async def generate(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         **kwargs: Any,
     ) -> ChatResponse:
         """Generate a response from the LLM.
@@ -59,7 +59,7 @@ class LLMProvider(ABC):
     @abstractmethod
     async def generate_stream(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         """Generate a streaming response.
@@ -91,17 +91,14 @@ class OpenAIProvider(LLMProvider):
 
     async def generate(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         temperature: float = 0.7,
         max_tokens: int = 1000,
         **kwargs: Any,
     ) -> ChatResponse:
         client = await self._get_client()
 
-        openai_messages = [
-            {"role": m.role, "content": m.content}
-            for m in messages
-        ]
+        openai_messages = [{"role": m.role, "content": m.content} for m in messages]
 
         response = await client.chat.completions.create(
             model=self.model,
@@ -122,17 +119,14 @@ class OpenAIProvider(LLMProvider):
 
     async def generate_stream(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         temperature: float = 0.7,
         max_tokens: int = 1000,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         client = await self._get_client()
 
-        openai_messages = [
-            {"role": m.role, "content": m.content}
-            for m in messages
-        ]
+        openai_messages = [{"role": m.role, "content": m.content} for m in messages]
 
         response = await client.chat.completions.create(
             model=self.model,
@@ -165,7 +159,7 @@ class AnthropicProvider(LLMProvider):
 
     async def generate(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         max_tokens: int = 1024,
         **kwargs: Any,
     ) -> ChatResponse:
@@ -199,7 +193,7 @@ class AnthropicProvider(LLMProvider):
 
     async def generate_stream(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         max_tokens: int = 1024,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
@@ -243,7 +237,7 @@ class MockProvider(LLMProvider):
 
     async def generate(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         **kwargs: Any,
     ) -> ChatResponse:
         import random
@@ -255,7 +249,7 @@ class MockProvider(LLMProvider):
 
     async def generate_stream(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         **kwargs: Any,
     ) -> AsyncIterator[str]:
         import random
@@ -272,9 +266,9 @@ class ContexoChat:
     def __init__(
         self,
         llm: LLMProvider,
-        contexo: Optional[Contexo] = None,
-        config: Optional[ContexoConfig] = None,
-        system_prompt: Optional[str] = None,
+        contexo: Contexo | None = None,
+        config: ContexoConfig | None = None,
+        system_prompt: str | None = None,
     ):
         """Initialize the chat client.
 
@@ -439,7 +433,7 @@ class ContexoChat:
         await self.initialize()
         return await self.contexo.get_message_context(query=query)
 
-    async def search_history(self, query: str, limit: int = 10) -> List[ChatMessage]:
+    async def search_history(self, query: str, limit: int = 10) -> list[ChatMessage]:
         """Search conversation history.
 
         Args:
@@ -462,6 +456,7 @@ class ContexoChat:
 
 
 # ==================== USAGE EXAMPLES ====================
+
 
 async def example_openai():
     """Example using OpenAI provider."""
@@ -509,11 +504,11 @@ async def example_mock():
     print("=== Mock LLM Example ===\n")
 
     response1 = await chat.chat("Hi, I'm Frank!")
-    print(f"You: Hi, I'm Frank!")
+    print("You: Hi, I'm Frank!")
     print(f"Bot: {response1.content}\n")
 
     response2 = await chat.chat("What's my name?")
-    print(f"You: What's my name?")
+    print("You: What's my name?")
     print(f"Bot: {response2.content}\n")
 
     # Search history

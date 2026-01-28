@@ -1,7 +1,6 @@
 """Example of using custom embedding functions with Contexo."""
 
 import asyncio
-from typing import Any
 
 
 async def main():
@@ -103,7 +102,7 @@ async def main():
     await persistent.initialize()
 
     # Test the custom embeddings
-    from contexo.core.memory import MemoryEntry, EntryType
+    from contexo.core.memory import EntryType, MemoryEntry
 
     entry1 = MemoryEntry(
         entry_type=EntryType.MESSAGE,

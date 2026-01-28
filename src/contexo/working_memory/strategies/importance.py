@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from contexo.core.memory import MemoryEntry
-from contexo.working_memory.strategies.base import CompactionStrategy, PassthroughStrategy
+from contexo.working_memory.strategies.base import PassthroughStrategy
 
 
 class ImportanceStrategy(PassthroughStrategy):
@@ -65,7 +65,9 @@ class ImportanceStrategy(PassthroughStrategy):
             # Apply recency bias (newer entries get boosted)
             if self._recency_bias > 0 and timestamp_range > 0:
                 recency_score = (entry.timestamp - min_timestamp) / timestamp_range
-                combined_score = importance * (1.0 - self._recency_bias) + recency_score * self._recency_bias
+                combined_score = (
+                    importance * (1.0 - self._recency_bias) + recency_score * self._recency_bias
+                )
             else:
                 combined_score = importance
 

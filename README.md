@@ -87,6 +87,26 @@ flowchart LR
 - **Provenance** — Full audit trail of memory operations
 - **Async-First** — Built on `asyncio` for non-blocking operations
 
+## Comparison
+
+| Library | Focus | Storage | Compaction | Async |
+|---------|-------|---------|------------|-------|
+| **Contexo** | Two-tier memory | SQLite, PostgreSQL, Neo4j, In-Memory | Multiple strategies | ✅ Native |
+| LangChain Memory | Chain integration | In-Memory, Redis, PostgreSQL | Token limit | ⚠️ Partial |
+| MemGPT | Agent memory | Local files, vector DBs | LLM summarization | ✅ Native |
+| Mem0 | Memory for AI | Qdrant, Postgres, Redis | LLM-based | ✅ Native |
+| LlamaIndex | RAG frameworks | Vector stores | Chunking | ✅ Native |
+| Semantic Kernel | Orchestrator | In-Memory, Redis | Sliding window | ✅ Native |
+
+**Why Contexo?**
+
+- **Simpler than frameworks** — Drop-in library, not a full framework like Mem0 or LangChain or Semantic Kernel
+- **Flexible storage** — Swap backends without code changes (SQLite → PostgreSQL → Neo4j)
+- **Multiple compaction strategies** — Choose what fits your use case (FIFO, importance, summarization)
+- **Sectioned memory** — Built-in support for prioritized context sections (system, user, RAG, tools)
+- **Provenance tracking** — Full audit trail for debugging and compliance
+- **Framework-agnostic** — Works with any LLM (OpenAI, Anthropic, local models)
+
 ## Installation
 
 ```bash
@@ -274,11 +294,19 @@ cd contexo
 # Install in development mode
 pip install -e ".[all,dev]"
 
-# Run tests
-pytest
+# Install pre-commit hooks (optional)
+pre-commit install
 
-# Run examples
-python examples/basic_usage.py
+# Run all checks (lint, format, test)
+./scripts/check.sh
+```
+
+# Pre-commit hooks (optional)
+pip install pre-commit && pre-commit install
+
+# Run checks manually
+./scripts/check.sh
+```
 ```
 
 ## Contributing

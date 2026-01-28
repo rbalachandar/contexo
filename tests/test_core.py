@@ -137,10 +137,7 @@ class TestContextWindow:
     def test_remove_oldest(self):
         """Test removing oldest entries."""
         window = ContextWindow(max_tokens=1000)
-        entries = [
-            MemoryEntry(content=f"entry-{i}", token_count=10)
-            for i in range(5)
-        ]
+        entries = [MemoryEntry(content=f"entry-{i}", token_count=10) for i in range(5)]
 
         for entry in entries:
             window.add(entry)

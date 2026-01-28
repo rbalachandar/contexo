@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any
 
 from contexo.core.exceptions import StorageError
 from contexo.core.memory import EntryType, MemoryEntry
@@ -145,7 +144,10 @@ class InMemoryStorage(StorageBackend):
                 # Apply filters
                 if query.entry_type is not None and entry.entry_type != query.entry_type:
                     continue
-                if query.conversation_id is not None and entry.conversation_id != query.conversation_id:
+                if (
+                    query.conversation_id is not None
+                    and entry.conversation_id != query.conversation_id
+                ):
                     continue
                 if query.parent_id is not None and entry.parent_id != query.parent_id:
                     continue

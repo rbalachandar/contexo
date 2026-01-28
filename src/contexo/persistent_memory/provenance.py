@@ -7,8 +7,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from contexo.core.memory import MemoryEntry
-
 logger = logging.getLogger(__name__)
 
 
@@ -121,7 +119,9 @@ class ProvenanceTracker:
         self._current_trail_id: str | None = None
         self._entry_to_trails: dict[str, set[str]] = {}
 
-    def start_trail(self, trail_id: str | None = None, metadata: dict[str, Any] | None = None) -> str:
+    def start_trail(
+        self, trail_id: str | None = None, metadata: dict[str, Any] | None = None
+    ) -> str:
         """Start a new provenance trail.
 
         Args:
@@ -149,7 +149,9 @@ class ProvenanceTracker:
         logger.debug(f"Started provenance trail: {trail_id}")
         return trail_id
 
-    def end_trail(self, trail_id: str | None = None, final_context: dict[str, Any] | None = None) -> ProvenanceTrail | None:
+    def end_trail(
+        self, trail_id: str | None = None, final_context: dict[str, Any] | None = None
+    ) -> ProvenanceTrail | None:
         """End a provenance trail.
 
         Args:

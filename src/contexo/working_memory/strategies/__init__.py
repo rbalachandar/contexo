@@ -13,9 +13,7 @@ from contexo.working_memory.strategies.summarization import (
 )
 
 
-def create_compaction_strategy(
-    strategy_type: str, **kwargs: Any
-) -> CompactionStrategy:
+def create_compaction_strategy(strategy_type: str, **kwargs: Any) -> CompactionStrategy:
     """Create a compaction strategy by type name.
 
     Args:

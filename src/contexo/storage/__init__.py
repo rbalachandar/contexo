@@ -18,7 +18,10 @@ except ImportError:
         """Placeholder when SQLite is not available."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            raise ImportError("aiosqlite is required for SQLite storage. Install with: pip install aiosqlite")
+            raise ImportError(
+                "aiosqlite is required for SQLite storage. Install with: pip install aiosqlite"
+            )
+
 
 try:
     from contexo.storage.graphdb import GraphDBStorage
@@ -31,7 +34,9 @@ except ImportError:
         """Placeholder when GraphDB is not available."""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
-            raise ImportError("neo4j is required for GraphDB storage. Install with: pip install neo4j")
+            raise ImportError(
+                "neo4j is required for GraphDB storage. Install with: pip install neo4j"
+            )
 
 
 def create_storage(backend_type: str, **kwargs: Any) -> StorageBackend:
@@ -58,13 +63,17 @@ def create_storage(backend_type: str, **kwargs: Any) -> StorageBackend:
 
     if backend_type == "sqlite":
         if not _sqlite_available:
-            raise ImportError("aiosqlite is required for SQLite storage. Install with: pip install aiosqlite")
+            raise ImportError(
+                "aiosqlite is required for SQLite storage. Install with: pip install aiosqlite"
+            )
         # SQLiteStorage expects db_path
         return SQLiteStorage(db_path=kwargs.get("db_path", ":memory:"))
 
     if backend_type in ("graphdb", "neo4j"):
         if not _graphdb_available:
-            raise ImportError("neo4j is required for GraphDB storage. Install with: pip install neo4j")
+            raise ImportError(
+                "neo4j is required for GraphDB storage. Install with: pip install neo4j"
+            )
         # GraphDBStorage expects uri, user, password, database
         return GraphDBStorage(
             uri=kwargs.get("uri", "bolt://localhost:7687"),

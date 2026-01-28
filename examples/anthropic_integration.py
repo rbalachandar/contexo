@@ -5,9 +5,8 @@ for AI conversations with persistent memory.
 """
 
 import asyncio
-import sys
 import os
-from typing import Any
+import sys
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -47,6 +46,7 @@ async def chat_with_claude():
 
     # Set conversation ID
     import uuid
+
     conversation_id = os.getenv("CONTEXO_CONVERSATION_ID", str(uuid.uuid4()))
     contexo.set_conversation_id(conversation_id)
 
@@ -79,16 +79,20 @@ async def chat_with_claude():
 
             # Add context as system message
             if context:
-                messages.append({
-                    "role": "user",
-                    "content": f"<previous_conversation>\n{context}\n</previous_conversation>",
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"<previous_conversation>\n{context}\n</previous_conversation>",
+                    }
+                )
 
             # Add current message
-            messages.append({
-                "role": "user",
-                "content": user_input,
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": user_input,
+                }
+            )
 
             # Call Claude
             print("Claude: ", end="", flush=True)

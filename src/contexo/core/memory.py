@@ -60,7 +60,7 @@ class MemoryEntry:
         if self.embedding is not None and len(self.embedding) == 0:
             raise ValidationError("Embedding must be None or non-empty")
 
-    def with_embedding(self, embedding: list[float]) -> "MemoryEntry":
+    def with_embedding(self, embedding: list[float]) -> MemoryEntry:
         """Return a new MemoryEntry with the given embedding.
 
         Since MemoryEntry is frozen, we need to create a new instance.
@@ -80,7 +80,7 @@ class MemoryEntry:
         }
         return MemoryEntry(**fields)
 
-    def with_importance(self, importance: float) -> "MemoryEntry":
+    def with_importance(self, importance: float) -> MemoryEntry:
         """Return a new MemoryEntry with the given importance score."""
         fields = {
             "id": self.id,

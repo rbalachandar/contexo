@@ -6,9 +6,9 @@ import asyncio
 async def main():
     """Demonstrate custom storage backend usage."""
     from contexo import Contexo
-    from contexo.config import ContexoConfig, StorageConfig, EmbeddingConfig, WorkingMemoryConfig
-    from contexo.storage import InMemoryStorage
+    from contexo.config import ContexoConfig, EmbeddingConfig, StorageConfig, WorkingMemoryConfig
     from contexo.embeddings import MockEmbeddings
+    from contexo.storage import InMemoryStorage
 
     print("=== Custom Backend Example ===\n")
 
@@ -30,9 +30,9 @@ async def main():
     )
 
     # Create Contexo with custom components
-    from contexo.working_memory.working_memory import WorkingMemory
     from contexo.persistent_memory.persistent_memory import PersistentMemory
     from contexo.working_memory.strategies import SlidingWindowStrategy
+    from contexo.working_memory.working_memory import WorkingMemory
 
     working = WorkingMemory(
         max_tokens=2000,

@@ -7,11 +7,11 @@ for decision-making.
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 async def main():
@@ -156,14 +156,13 @@ async def main():
         "target_message": serialize_entry(context["entry"]),
         "parent": serialize_entry(context["parent"]) if context["parent"] else None,
         "children": [serialize_entry(c) for c in context["children"]],
-        "conversation_context": [
-            serialize_entry(e) for e in context["conversation_context"]
-        ],
+        "conversation_context": [serialize_entry(e) for e in context["conversation_context"]],
         "related_count": len(context["related"]),
         "relationship_graph": context.get("relationship_graph", {}),
     }
 
     import json
+
     print(json.dumps(evidence_export, indent=2)[:500] + "...")
 
     # ============ SUMMARY ============

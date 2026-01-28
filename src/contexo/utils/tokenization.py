@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable
+from collections.abc import Callable
 
 
 def count_tokens_by_words(text: str) -> int:
@@ -22,7 +22,7 @@ def count_tokens_by_words(text: str) -> int:
     # Split by whitespace and count
     words = text.split()
     # Add tokens for punctuation (rough approximation)
-    punctuation_count = len(re.findall(r'[^\w\s]', text))
+    punctuation_count = len(re.findall(r"[^\w\s]", text))
     return len(words) + (punctuation_count // 2)
 
 
@@ -57,7 +57,9 @@ def count_tokens_by_tiktoken(text: str, model: str = "gpt-4") -> int:
     try:
         import tiktoken
     except ImportError:
-        raise ImportError("tiktoken is required for accurate token counting. Install with: pip install tiktoken")
+        raise ImportError(
+            "tiktoken is required for accurate token counting. Install with: pip install tiktoken"
+        )
 
     encoding = tiktoken.encoding_for_model(model)
     return len(encoding.encode(text))

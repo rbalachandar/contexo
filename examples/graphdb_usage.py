@@ -16,8 +16,7 @@ import asyncio
 
 async def main():
     """Demonstrate GraphDB usage with Contexo."""
-    from contexo import Contexo, graphdb_config
-    from contexo.storage import GraphDBStorage
+    from contexo import graphdb_config
 
     print("=== Contexo GraphDB Example ===\n")
 

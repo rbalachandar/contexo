@@ -5,10 +5,10 @@ memory management without requiring any external API keys.
 """
 
 import asyncio
-import sys
 import os
+import random
+import sys
 import uuid
-from datetime import datetime
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -24,6 +24,7 @@ class SimpleChatClient:
         # Try to use local config with SQLite, fall back to minimal if not available
         try:
             from contexo import local_config
+
             self.config = local_config(db_path="./chat_memory.db")
         except ImportError:
             self.config = minimal_config()
@@ -108,7 +109,6 @@ class SimpleChatClient:
 
     async def process_message(self, user_input: str):
         """Process a user message and generate a response."""
-        import random
 
         # Save user message
         await self.contexo.add_message(
@@ -153,7 +153,11 @@ class SimpleChatClient:
                 return f"Nice to meet you, {name.capitalize()}! I'll remember your name."
 
         # Check if user mentioned something before
-        if "remember" in user_input_lower or "did i say" in user_input_lower or "do you know" in user_input_lower:
+        if (
+            "remember" in user_input_lower
+            or "did i say" in user_input_lower
+            or "do you know" in user_input_lower
+        ):
             # Search memory for relevant context
             words = user_input_lower.split()
             for word in words:
@@ -213,14 +217,14 @@ class SimpleChatClient:
 
         if context_data["entry"]:
             entry = context_data["entry"]
-            print(f"\nTarget Message:")
+            print("\nTarget Message:")
             print(f"  [{entry.entry_type.value}] {entry.content}")
         else:
             print("\nNo message found matching that query.")
             return
 
         if context_data["parent"]:
-            print(f"\nParent:")
+            print("\nParent:")
             print(f"  {context_data['parent'].content[:60]}...")
 
         if context_data["children"]:
@@ -238,17 +242,19 @@ class SimpleChatClient:
         stats = self.contexo.get_stats()
 
         print("\n─── Memory Statistics ───")
-        print(f"Working Memory:")
+        print("Working Memory:")
         print(f"  Entries: {stats['working_memory']['total_entries']}")
-        print(f"  Tokens: {stats['working_memory']['total_tokens']}/{stats['working_memory']['max_tokens']}")
+        print(
+            f"  Tokens: {stats['working_memory']['total_tokens']}/{stats['working_memory']['max_tokens']}"
+        )
         print(f"  Utilization: {stats['working_memory']['utilization']:.1%}")
         print(f"  Strategy: {stats['working_memory']['strategy']}")
 
-        print(f"\nPersistent Memory:")
+        print("\nPersistent Memory:")
         print(f"  Type: {stats['persistent_memory']['storage_type']}")
         print(f"  Embedding: {stats['persistent_memory']['embedding_provider']}")
 
-        print(f"\nConversation:")
+        print("\nConversation:")
         print(f"  ID: {self.conversation_id}")
         print()
 
@@ -274,7 +280,7 @@ class SimpleChatClient:
     async def quit(self):
         """Handle quit sequence."""
         stats = self.contexo.get_stats()
-        total_messages = stats['working_memory']['total_entries']
+        total_messages = stats["working_memory"]["total_entries"]
 
         await self.contexo.close()
 
@@ -283,7 +289,7 @@ class SimpleChatClient:
         print("╚════════════════════════════════════════════════════════════╝")
         print(f"  Messages exchanged: {total_messages}")
         print(f"  Conversation ID: {self.conversation_id}")
-        print(f"  Memory database: ./chat_memory.db")
+        print("  Memory database: ./chat_memory.db")
         print("\n  Your conversation has been saved!")
         print("  Come back anytime - I'll remember what we talked about.")
         print()

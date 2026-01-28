@@ -7,10 +7,9 @@ for persistent, searchable context management.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from contexo import Contexo, ContexoConfig
-from contexo.core.memory import EntryType, MemoryEntry
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ class ContexoMemory(BaseMemory):
     contexo: Contexo
 
     @property
-    def memory_variables(self) -> List[str]:
+    def memory_variables(self) -> list[str]:
         """Return the memory variable names."""
         return ["history"]
 
@@ -148,7 +147,7 @@ class ContexoMemory(BaseMemory):
 
         return context
 
-    def load_memory_variables(self, inputs: Dict[str, Any]) -> Dict[str, str]:
+    def load_memory_variables(self, inputs: dict[str, Any]) -> dict[str, str]:
         """Load memory variables for LangChain.
 
         Args:
@@ -177,8 +176,8 @@ class ContexoMemory(BaseMemory):
 
     async def asave_context(
         self,
-        inputs: Dict[str, Any],
-        outputs: Dict[str, Any],
+        inputs: dict[str, Any],
+        outputs: dict[str, Any],
     ) -> None:
         """Save context after a conversation turn.
 
@@ -208,7 +207,7 @@ class ContexoMemory(BaseMemory):
                 importance=0.8,
             )
 
-    def save_context(self, inputs: Dict[str, Any], outputs: Dict[str, Any]) -> None:
+    def save_context(self, inputs: dict[str, Any], outputs: dict[str, Any]) -> None:
         """Sync version of save_context (for compatibility).
 
         Note: This will not persist data. Use asave_context for proper functionality.
@@ -234,7 +233,7 @@ class ContexoMemory(BaseMemory):
         self,
         query: str,
         message_id: str | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get provenance information for a message.
 
         Args:

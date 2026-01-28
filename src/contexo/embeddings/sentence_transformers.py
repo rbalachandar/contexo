@@ -10,7 +10,6 @@ import numpy as np
 from contexo.core.exceptions import EmbeddingError
 from contexo.embeddings.base import EmbeddingProvider
 
-
 # Cache for models to avoid reloading
 _model_cache: dict[str, Any] = {}
 

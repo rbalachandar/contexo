@@ -57,8 +57,8 @@ async def contexo():
     ctx.config = config
 
     # Create minimal components
-    from contexo.storage import InMemoryStorage
     from contexo.embeddings import MockEmbeddings
+    from contexo.storage import InMemoryStorage
 
     storage = InMemoryStorage()
     await storage.initialize()

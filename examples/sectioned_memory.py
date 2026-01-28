@@ -5,14 +5,14 @@ different types of context with separate token limits and eviction priorities.
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from contexo import Contexo, chat_config
-from contexo.core.memory import MemoryEntry, EntryType
+from contexo.core.memory import EntryType, MemoryEntry
 
 
 async def main():
@@ -31,7 +31,7 @@ async def main():
             "conversation": {"max_tokens": 5000},  # Largest allocation
             "rag_context": {"max_tokens": 1200},
             "tools": {"max_tokens": 500, "priority": "low"},
-        }
+        },
     )
 
     ctx = Contexo(config=config)
@@ -192,7 +192,7 @@ async def main():
         )
 
     stats_after = ctx.working_memory.get_stats()
-    print(f"\nAfter adding 20 more messages:")
+    print("\nAfter adding 20 more messages:")
     print(f"  Total entries: {stats_after['total_entries']}")
     print(f"  Total tokens: {stats_after['total_tokens']}/{stats_after['max_tokens']}")
     print(f"  Utilization: {stats_after['utilization']:.1%}")
@@ -235,7 +235,9 @@ async def main():
     )
 
     final_stats = ctx.working_memory.get_stats()
-    print(f"\nWorking notes: {final_stats['sectioned_mode'] and final_stats['sections'][-1].entry_count} entries")
+    print(
+        f"\nWorking notes: {final_stats['sectioned_mode'] and final_stats['sections'][-1].entry_count} entries"
+    )
 
     await ctx.close()
     print("\nExample complete!")

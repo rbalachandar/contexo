@@ -37,8 +37,8 @@ from contexo.core.memory import EntryType, MemoryEntry
 from contexo.embeddings import create_embedding_provider
 from contexo.persistent_memory.persistent_memory import PersistentMemory
 from contexo.persistent_memory.provenance import ProvenanceTracker
-from contexo.working_memory.working_memory import WorkingMemory
 from contexo.storage import create_storage
+from contexo.working_memory.working_memory import WorkingMemory
 
 logger = logging.getLogger(__name__)
 

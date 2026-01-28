@@ -52,7 +52,9 @@ class OpenAIEmbeddings(EmbeddingProvider):
         if self._initialized:
             return
 
-        self._client = AsyncOpenAI(api_key=self._client_kwargs.pop("api_key", None), **self._client_kwargs)
+        self._client = AsyncOpenAI(
+            api_key=self._client_kwargs.pop("api_key", None), **self._client_kwargs
+        )
         self._initialized = True
 
     async def close(self) -> None:

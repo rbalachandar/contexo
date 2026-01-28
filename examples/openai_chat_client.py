@@ -5,9 +5,8 @@ for a production-ready chatbot with persistent memory.
 """
 
 import asyncio
-import sys
 import os
-from typing import Any
+import sys
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -16,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 async def chat_with_memory():
     """Interactive chat using OpenAI API with Contexo memory."""
     from openai import AsyncOpenAI
+
     from contexo import Contexo, local_config
 
     print("=== OpenAI Chat Client with Contexo Memory ===\n")
@@ -41,6 +41,7 @@ async def chat_with_memory():
 
     # Get or create conversation ID
     import uuid
+
     conversation_id = os.getenv("CONTEXO_CONVERSATION_ID", str(uuid.uuid4()))
     contexo.set_conversation_id(conversation_id)
 
@@ -66,9 +67,11 @@ async def chat_with_memory():
 
             if user_input.lower() == "stats":
                 stats = contexo.get_stats()
-                print(f"\n--- Statistics ---")
+                print("\n--- Statistics ---")
                 print(f"Working memory entries: {stats['working_memory']['total_entries']}")
-                print(f"Token usage: {stats['working_memory']['total_tokens']}/{stats['working_memory']['max_tokens']}")
+                print(
+                    f"Token usage: {stats['working_memory']['total_tokens']}/{stats['working_memory']['max_tokens']}"
+                )
                 print(f"Utilization: {stats['working_memory']['utilization']:.1%}")
                 continue
 
@@ -97,7 +100,6 @@ async def chat_with_memory():
                     messages.append({"role": "user", "content": line[6:]})
                 elif line.startswith("assistant: "):
                     messages.append({"role": "assistant", "content": line[11:]})
-
 
             # Add current user message
             messages.append({"role": "user", "content": user_input})
@@ -144,6 +146,7 @@ async def chat_with_memory():
 async def simple_chat_example():
     """Simple one-shot chat example."""
     from openai import AsyncOpenAI
+
     from contexo import Contexo, minimal_config
 
     print("\n=== Simple Chat Example ===\n")
@@ -231,7 +234,7 @@ async def mock_chat_demo():
 
     # Show provenance
     ctx = await contexo.get_message_context(query="data scientist")
-    print(f"\nProvenance for 'data scientist':")
+    print("\nProvenance for 'data scientist':")
     print(f"  Message: {ctx['entry'].content if ctx['entry'] else 'Not found'}")
     print(f"  Related: {len(ctx.get('related', []))} messages")
 

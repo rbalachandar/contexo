@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from contexo.core.exceptions import TokenLimitError
 from contexo.core.memory import EntryType, MemoryEntry
@@ -201,7 +201,7 @@ class ContextWindow:
         """Clear all entries from the window."""
         self.entries.clear()
 
-    def clone(self) -> "ContextWindow":
+    def clone(self) -> ContextWindow:
         """Create a copy of this context window.
 
         Returns:

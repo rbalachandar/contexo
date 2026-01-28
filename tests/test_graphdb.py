@@ -5,8 +5,8 @@ import pytest
 # Only run these tests if neo4j is available
 pytest.importorskip("neo4j")
 
-from contexo.storage.graphdb import GraphDBStorage
 from contexo.core.memory import EntryType, MemoryEntry
+from contexo.storage.graphdb import GraphDBStorage
 
 
 @pytest.fixture
@@ -143,12 +143,8 @@ class TestGraphDBStorage:
             await graphdb_storage.save(entry)
 
         # Create custom chain relationships
-        await graphdb_storage.create_relationship(
-            entries[0].id, entries[1].id, "CHAIN"
-        )
-        await graphdb_storage.create_relationship(
-            entries[1].id, entries[2].id, "CHAIN"
-        )
+        await graphdb_storage.create_relationship(entries[0].id, entries[1].id, "CHAIN")
+        await graphdb_storage.create_relationship(entries[1].id, entries[2].id, "CHAIN")
 
         # Traverse from A
         connected = await graphdb_storage.traverse(

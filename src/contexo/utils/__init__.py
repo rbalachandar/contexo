@@ -1,13 +1,13 @@
 """Utility functions for Contexo."""
 
 from contexo.utils.serialization import (
-    deserialize_entry,
     deserialize_entries,
+    deserialize_entry,
     entry_from_json,
     entry_to_json,
     export_context,
-    serialize_entry,
     serialize_entries,
+    serialize_entry,
 )
 from contexo.utils.tokenization import (
     count_tokens_by_characters,

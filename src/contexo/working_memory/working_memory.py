@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from contexo.core.context import ContextWindow
@@ -252,7 +252,9 @@ class WorkingMemory(MemoryManager):
         if self._context_window.can_fit(entry):
             self._context_window.add(entry)
             self._entry_sections[entry.id] = target_section
-            logger.debug(f"Added entry {entry.id} to section {target_section} ({entry.token_count} tokens)")
+            logger.debug(
+                f"Added entry {entry.id} to section {target_section} ({entry.token_count} tokens)"
+            )
             return entry
 
         # Entry doesn't fit in total window - trigger compaction
@@ -342,12 +344,13 @@ class WorkingMemory(MemoryManager):
 
         # Get entries in this section
         section_entries = [
-            e for e in self._context_window.entries
+            e
+            for e in self._context_window.entries
             if self._entry_sections.get(e.id, "default") == section_name
         ]
 
         # Evict oldest entries from this section
-        to_evict = section_entries[:required_tokens // 50 + 1]  # Rough estimate
+        to_evict = section_entries[: required_tokens // 50 + 1]  # Rough estimate
 
         for entry in to_evict:
             self._context_window.remove(entry.id)
@@ -380,7 +383,8 @@ class WorkingMemory(MemoryManager):
         while not self._context_window.can_fit(new_entry) and attempt < max_attempts:
             # Get entries that can be evicted (not pinned)
             evictable_entries = [
-                e for e in self._context_window.entries
+                e
+                for e in self._context_window.entries
                 if not self._sections.get(
                     self._entry_sections.get(e.id, "default"),
                     self._sections["default"],
@@ -403,9 +407,7 @@ class WorkingMemory(MemoryManager):
             for entry in to_evict:
                 self._context_window.remove(entry.id)
                 entry_section = self._entry_sections.pop(entry.id, None)
-                logger.debug(
-                    f"Evicted entry {entry.id} from section {entry_section}"
-                )
+                logger.debug(f"Evicted entry {entry.id} from section {entry_section}")
 
             # If strategy supports compaction, create a summary
             if hasattr(self._strategy, "compact"):
@@ -456,7 +458,9 @@ class WorkingMemory(MemoryManager):
             pinned=pinned,
         )
         self._sectioned_mode = True
-        logger.info(f"Added section '{name}' (max_tokens={max_tokens}, priority={priority}, pinned={pinned})")
+        logger.info(
+            f"Added section '{name}' (max_tokens={max_tokens}, priority={priority}, pinned={pinned})"
+        )
 
     def update_section(
         self,
@@ -530,11 +534,13 @@ class WorkingMemory(MemoryManager):
 
             section = self._sections[name]
             entry_count = sum(
-                1 for e in self._context_window.entries
+                1
+                for e in self._context_window.entries
                 if self._entry_sections.get(e.id, "default") == name
             )
             token_count = sum(
-                e.token_count for e in self._context_window.entries
+                e.token_count
+                for e in self._context_window.entries
                 if self._entry_sections.get(e.id, "default") == name
             )
 
@@ -658,7 +664,8 @@ class WorkingMemory(MemoryManager):
         else:
             # Remove entries from specific section
             to_remove = [
-                e.id for e in self._context_window.entries
+                e.id
+                for e in self._context_window.entries
                 if self._entry_sections.get(e.id, "default") == section
             ]
             for entry_id in to_remove:
@@ -712,7 +719,8 @@ class WorkingMemory(MemoryManager):
         parts = []
         for section_name in self._sections:
             entries = [
-                e for e in self._context_window.entries
+                e
+                for e in self._context_window.entries
                 if self._entry_sections.get(e.id, "default") == section_name
             ]
             if entries:
@@ -726,7 +734,9 @@ class WorkingMemory(MemoryManager):
 
         return section_separator.join(parts)
 
-    async def promote_from(self, entries: list[MemoryEntry], section: str | None = None) -> list[MemoryEntry]:
+    async def promote_from(
+        self, entries: list[MemoryEntry], section: str | None = None
+    ) -> list[MemoryEntry]:
         """Promote entries from long-term memory to working memory.
 
         Args:
