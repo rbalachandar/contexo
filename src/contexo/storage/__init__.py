@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from contexo.storage.base import SearchQuery, SearchResult, StorageBackend
 from contexo.storage.in_memory import InMemoryStorage
+
+if TYPE_CHECKING:
+    from contexo.storage.graphdb import GraphDBStorage as _GraphDBStorage
+    from contexo.storage.sqlite import SQLiteStorage as _SQLiteStorage
 
 try:
     from contexo.storage.sqlite import SQLiteStorage

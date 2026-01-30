@@ -9,6 +9,25 @@
 
 Contexo provides a two-tier memory system for managing conversation context: fast session memory for active conversations and user memory with semantic search for long-term storage.
 
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Features](#features)
+- [Comparison](#comparison)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [User Memory](#user-memory)
+- [Storage Backends](#storage-backends)
+- [Sectioned Memory](#sectioned-memory)
+- [Compaction Strategies](#compaction-strategies)
+- [Tool Calls](#tool-calls)
+- [Configuration](#configuration)
+- [Observability](#observability)
+- [Integrations](#integrations)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Architecture
 
 ```mermaid
@@ -120,6 +139,7 @@ pip install contexo[openai]       # OpenAI embeddings
 pip install contexo[embeddings]   # Sentence Transformers
 pip install contexo[postgresql]   # PostgreSQL backend
 pip install contexo[neo4j]        # Neo4j backend
+pip install contexo[opentelemetry] # OpenTelemetry tracing
 pip install contexo[all]          # All extras
 ```
 
@@ -262,6 +282,73 @@ config = ContexoConfig(
     working_memory_max_tokens=4000,
 )
 ```
+
+## Observability
+
+### OpenTelemetry Tracing
+
+Contexo supports OpenTelemetry tracing for observability. All memory operations are automatically traced when enabled.
+
+```python
+from contexo.tracing import setup_tracing
+from contexo import Contexo, local_config
+
+# Setup tracing (once at application startup)
+setup_tracing(
+    service_name="my-app",
+    endpoint="http://localhost:4317",  # OTLP endpoint
+)
+
+# Or for development - print to console
+setup_tracing(service_name="my-app", console=True)
+
+ctx = Contexo(config=local_config())
+await ctx.initialize()
+
+# All operations are now traced
+await ctx.add_message("Hello!", role="user")
+results = await ctx.search_memory("greeting")
+```
+
+**Install tracing support:**
+```bash
+pip install contexo[opentelemetry]
+```
+
+**Traced operations:**
+- `add_message` — Message additions
+- `add_tool_call` / `add_tool_response` — Tool operations
+- `get_context` — Context retrieval
+- `search_memory` — Semantic search queries
+- `promote_relevant` — Memory promotion
+
+**Spans include attributes:**
+- `conversation_id` — Conversation identifier
+- `entry_type` — Type of entry (message, tool_call, etc.)
+- `role` — Message role (user, assistant, system)
+- `search.query` — Search query text
+- `result.count` — Number of results returned
+
+**Example trace output (console):**
+```json
+{
+  "name": "contexo.add_message",
+  "context": {
+    "trace_id": "0x4bf92f3577b34da6a3ce929d0e0e4736",
+    "span_id": "0x00f067aa0ba902b7"
+  },
+  "attributes": {
+    "conversation_id": "conv-123",
+    "entry_type": "message",
+    "role": "user"
+  }
+}
+```
+
+**Viewing traces:**
+- **Jaeger UI** — http://localhost:16686 (run `docker run -p 16686:16686 -p 4317:4317 jaegertracing/all-in-one`)
+- **Grafana Tempo** — Query and visualize traces
+- **Any OTLP backend** — Send to your observability platform
 
 ## Integrations
 

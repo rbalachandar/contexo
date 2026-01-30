@@ -10,11 +10,15 @@ This backend provides relationship-based memory storage, allowing you to:
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from contexo.core.exceptions import StorageError
 from contexo.core.memory import EntryType, MemoryEntry
 from contexo.storage.base import SearchQuery, SearchResult, StorageBackend
+
+if TYPE_CHECKING:
+    from neo4j import AsyncDriver as _AsyncDriver  # noqa: F401
+    from neo4j import AsyncGraphDatabase as _AsyncGraphDatabase  # noqa: F401
 
 try:
     from neo4j import AsyncDriver, AsyncGraphDatabase
@@ -196,7 +200,7 @@ class GraphDBStorage(StorageBackend):
         # Conversation relationship
         if entry.conversation_id:
             # Find other entries in the same conversation
-            result = await self._execute_query(
+            await self._execute_query(
                 """
                 MATCH (e:MemoryEntry {id: $id})
                 MATCH (other:MemoryEntry)

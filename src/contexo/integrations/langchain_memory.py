@@ -7,15 +7,17 @@ for persistent, searchable context management.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from contexo import Contexo, ContexoConfig
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from langchain.memory import BaseMemory as _BaseMemory  # noqa: F401
+
 try:
     from langchain.memory import BaseMemory
-    from langchain.schema import BaseMessage, get_buffer_string
 
     _langchain_available = True
 except ImportError:

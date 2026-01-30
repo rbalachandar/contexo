@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from contexo.embeddings.base import EmbeddingProvider
 from contexo.embeddings.mock import MockEmbeddings
+
+if TYPE_CHECKING:
+    from contexo.embeddings.openai import OpenAIEmbeddings as _OpenAIEmbeddings
+    from contexo.embeddings.sentence_transformers import (
+        SentenceTransformersEmbeddings as _SentenceTransformersEmbeddings,
+    )
 
 try:
     from contexo.embeddings.openai import OpenAIEmbeddings
