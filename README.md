@@ -11,22 +11,127 @@ Contexo provides a two-tier memory system for managing conversation context: fas
 
 ## Table of Contents
 
-- [Architecture](#architecture)
 - [Features](#features)
-- [Comparison](#comparison)
+- [Why Contexo](#why-contexo)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [How It Works](#how-it-works)
 - [User Memory](#user-memory)
 - [Storage Backends](#storage-backends)
 - [Sectioned Memory](#sectioned-memory)
 - [Compaction Strategies](#compaction-strategies)
 - [Tool Calls](#tool-calls)
+- [LLM Tool Integration](#llm-tool-integration)
 - [Configuration](#configuration)
 - [Observability](#observability)
+- [Multi-Agent Systems](#multi-agent-systems)
 - [Integrations](#integrations)
 - [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
+
+## Features
+
+- **Session Memory** — Fast in-memory context with auto-compaction strategies
+- **User Memory** — SQLite, PostgreSQL, and Neo4j backends for long-term storage
+- **Semantic Search** — Vector similarity search using embeddings
+- **Sectioned Context** — Partition memory by priority (system, user, RAG, tools)
+- **Multi-Agent Support** — Shared context with private agent thoughts
+- **Tool Tracking** — First-class support for tool calls and responses
+- **Provenance** — Full audit trail of memory operations
+- **Async-First** — Built on `asyncio` for non-blocking operations
+
+## Why Contexo?
+
+| Feature | Contexo | Acontext | MemU | LangChain | MemGPT | Mem0 |
+|---------|---------|----------|------|-----------|--------|------|
+| **Type** | ✅ Drop-in library | ⚠️ Platform/Infra | ⚠️ Framework | ❌ Framework | ❌ Framework | ⚠️ Platform |
+| **Scope** | ✅ Memory management | ⚠️ Context infrastructure | ✅ Agentic memory | ❌ Chain integration | ❌ Agent memory | ⚠️ AI memory |
+| **Memory model** | ✅ 2-tier (Working + Persistent) | ⚠️ Sessions | ✅ 3-layer (Resource → Item → Category) | ⚠️ Basic | ⚠️ Layers | ⚠️ Cloud |
+| **Self-hosted** | ✅ Local or Cloud (PG/Neo4j) | ❌ Cloud (PostgreSQL) | ✅ Yes | ✅ Yes | ✅ Local | ❌ Cloud (DBs) |
+| **Data types** | ⚠️ Text (messages) | ✅ Text, images, files, tools | ✅ Multi-modal (text, images, audio, video) | ⚠️ Messages | ⚠️ Messages | ⚠️ Messages |
+| **Storage flexibility** | ✅ SQLite/PG/Neo4j/In-Memory (local or cloud) | ⚠️ PostgreSQL only | ⚠️ File-based + DB | ⚠️ Limited | ❌ Files only | ⚠️ Vector DBs |
+| **Compaction** | ✅ 4+ strategies | ⚠️ LRU/deletion | ❌ N/A (different approach) | ❌ Token limit | ✅ Summarization | ✅ LLM-based |
+| **Sectioned memory** | ✅ Built-in sections | ⚠️ Via spaces/artifacts | ✅ Built-in categories | ❌ Manual | ❌ Manual | ❌ Manual |
+| **Provenance** | ✅ Full audit trail | ⚠️ Task tracking | ✅ Full traceability | ❌ No | ⚠️ Basic | ⚠️ Basic |
+| **Retrieval** | ✅ Semantic search | ⚠️ pgvector | ✅ **RAG + LLM file reading** | ⚠️ Via vector store | ⚠️ Via add-ons | ✅ Core feature |
+| **Tool tracking** | ✅ First-class | ✅ First-class | ❌ N/A | ⚠️ Via agent | ✅ Supported | ❌ No |
+| **Self-evolving** | ❌ No | ❌ No | ✅ **Yes** | ❌ No | ❌ No | ❌ No |
+| **Languages** | ⚠️ Python | ✅ Python + TypeScript | ⚠️ Python | ⚠️ Python | ⚠️ Python | ⚠️ Python |
+| **Async-native** | ✅ Full async | ✅ Full async | ✅ Full async | ⚠️ Partial | ✅ Full async | ✅ Full async |
+
+| **Search scope** | ✅ **All conversations, global** | ⚠️ Within space only | ⚠️ Within scope | ❌ Per memory | ❌ Limited | ❌ Per memory |
+| **Hybrid search** | ✅ **Semantic + FTS fallback** | ❌ Vector only | ✅ **RAG + LLM-based** | ⚠️ Vector only | ⚠️ Vector only | ⚠️ Vector only |
+
+**Key differentiators:**
+
+- **Flexible semantic search** — Pluggable providers (OpenAI, SentenceTransformers, custom), search across ALL conversations
+- **Local-first** — Run anywhere without cloud dependencies (SQLite, Neo4j, In-Memory)
+- **Sectioned memory** — Organize by priority (system → user → conversation → RAG)
+- **Provenance tracking** — Full audit trail for debugging
+- **Flexible storage** — Swap backends without code changes
+
+## Alignment with OpenAI's Memory Layers
+
+[OpenAI's in-house data agent](https://openai.com/index/inside-our-in-house-data-agent/) uses multiple context layers for reliable analytics. Contexo's design aligns with several key concepts:
+
+| OpenAI's Layer | Contexo Equivalent |
+|----------------|-------------------|
+| **Metadata grounding** | Entry metadata (role, type, section) |
+| **Query inference** | `search_memory()` with semantic search |
+| **Curated descriptions** | Manual entries via `add_message()` |
+| **Institutional memory** | Persistent memory with cross-conversation search |
+| **Scoped memory** | `agent_id` + `scope` metadata filtering |
+| **Runtime context** | Working memory (fast, in-memory) |
+
+**Key similarities:**
+- **Scoped memory** — Separate global (shared) and personal (agent-specific) context
+- **Semantic search** — RAG-based retrieval finds relevant context automatically
+- **Multi-layer context** — Sectioned memory (system, conversation, RAG, tools)
+
+---
+
+**Acontext** is ideal for production multi-agent systems needing rich data types and infrastructure. **MemU** excels at long-term agent memory and skill extraction. **Contexo** is ideal for drop-in memory management in LLM applications.
+
+## Installation
+
+```bash
+pip install contexo
+```
+
+### Optional dependencies
+
+```bash
+pip install contexo[openai]       # OpenAI embeddings
+pip install contexo[embeddings]   # Sentence Transformers
+pip install contexo[postgresql]   # PostgreSQL backend
+pip install contexo[neo4j]        # Neo4j backend
+pip install contexo[opentelemetry] # OpenTelemetry tracing
+pip install contexo[all]          # All extras
+```
+
+## Quick Start
+
+```python
+import asyncio
+from contexo import Contexo
+from contexo.config.defaults import minimal_config
+
+async def main():
+    ctx = Contexo(config=minimal_config())
+    await ctx.initialize()
+
+    await ctx.add_message("user", "My favorite color is blue")
+    await ctx.add_message("assistant", "I'll remember that.")
+
+    context = await ctx.get_context()
+    print(context)
+
+    await ctx.close()
+
+asyncio.run(main())
+```
 
 ## Architecture
 
@@ -96,73 +201,201 @@ flowchart LR
     end
 ```
 
-## Features
+## How It Works
 
-- **Session Memory** — Fast in-memory context with auto-compaction strategies
-- **User Memory** — SQLite, PostgreSQL, and Neo4j backends for long-term storage
-- **Semantic Search** — Vector similarity search using embeddings
-- **Sectioned Context** — Partition memory by priority (system, user, RAG, tools)
-- **Tool Tracking** — First-class support for tool calls and responses
-- **Provenance** — Full audit trail of memory operations
-- **Async-First** — Built on `asyncio` for non-blocking operations
+### Adding Messages
 
-## Comparison
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Ctx as Contexo
+    participant WM as Working Memory
+    participant PM as Persistent Memory
+    participant DB as Storage (SQLite/PG)
+    participant Emb as Embeddings
 
-| Library | Focus | Storage | Compaction | Async |
-|---------|-------|---------|------------|-------|
-| **Contexo** | Two-tier memory | SQLite, PostgreSQL, Neo4j, In-Memory | Multiple strategies | ✅ Native |
-| LangChain Memory | Chain integration | In-Memory, Redis, PostgreSQL | Token limit | ⚠️ Partial |
-| MemGPT | Agent memory | Local files, vector DBs | LLM summarization | ✅ Native |
-| Mem0 | Memory for AI | Qdrant, Postgres, Redis | LLM-based | ✅ Native |
-| LlamaIndex | RAG frameworks | Vector stores | Chunking | ✅ Native |
-| Semantic Kernel | Orchestrator | In-Memory, Redis | Sliding window | ✅ Native |
+    App->>Ctx: add_message("Hello", role="user")
+    Ctx->>PM: add(entry)
+    PM->>Emb: generate_embedding(entry)
+    Emb-->>PM: embedding_vector
+    PM->>DB: store(entry, embedding)
 
-**Why Contexo?**
+    Note over PM,WM: Immediate sync
 
-- **Simpler than frameworks** — Drop-in library, not a full framework like Mem0 or LangChain or Semantic Kernel
-- **Flexible storage** — Swap backends without code changes (SQLite → PostgreSQL → Neo4j)
-- **Multiple compaction strategies** — Choose what fits your use case (FIFO, importance, summarization)
-- **Sectioned memory** — Built-in support for prioritized context sections (system, user, RAG, tools)
-- **Provenance tracking** — Full audit trail for debugging and compliance
-- **Framework-agnostic** — Works with any LLM (OpenAI, Anthropic, local models)
+    PM->>WM: add(entry)
+    WM->>WM: estimate_tokens(entry)
+    WM->>WM: check_capacity()
+    alt Full?
+        WM->>WM: compact(strategy)
+    end
+    WM->>WM: add_to_context_window(entry)
 
-## Installation
-
-```bash
-pip install contexo
+    PM-->>Ctx: entry saved
+    WM-->>Ctx: entry added
+    Ctx-->>App: MemoryEntry
 ```
 
-### Optional dependencies
+### Context Retrieval (what LLM sees)
 
-```bash
-pip install contexo[openai]       # OpenAI embeddings
-pip install contexo[embeddings]   # Sentence Transformers
-pip install contexo[postgresql]   # PostgreSQL backend
-pip install contexo[neo4j]        # Neo4j backend
-pip install contexo[opentelemetry] # OpenTelemetry tracing
-pip install contexo[all]          # All extras
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Ctx as Contexo
+    participant WM as Working Memory
+    participant LLM as LLM API
+
+    App->>Ctx: get_context()
+    Ctx->>WM: list_all()
+    WM-->>Ctx: [MemoryEntry...]
+
+    Note over Ctx: Format entries
+
+    loop For each entry
+        Ctx->>Ctx: format("{role}: {content}")
+    end
+
+    Ctx-->>App: "system: You are helpful...\nuser: Hello..."
+
+    App->>LLM: messages = [context, user_input]
+    LLM-->>App: Response
 ```
 
-## Quick Start
+### LLM Tool Calling
 
-```python
-import asyncio
-from contexo import Contexo
-from contexo.config.defaults import minimal_config
+```mermaid
+sequenceDiagram
+    participant User as User
+    participant App as Application
+    participant Ctx as Contexo
+    participant LLM as LLM API
+    participant Tools as Tool Handlers
 
-async def main():
-    ctx = Contexo(config=minimal_config())
-    await ctx.initialize()
+    User->>App: "What did I say about diet?"
+    App->>Ctx: add_message(user_input)
+    App->>Ctx: get_context()
+    Ctx-->>App: context_string
+    App->>LLM: messages + tools
 
-    await ctx.add_message("user", "My favorite color is blue")
-    await ctx.add_message("assistant", "I'll remember that.")
+    Note over LLM: LLM decides to use tool
 
-    context = await ctx.get_context()
-    print(context)
+    LLM-->>App: tool_calls: [{"name": "search_memory"}]
+    App->>Tools: handle("search_memory", {"query": "diet"})
+    Tools->>Ctx: search_memory("diet")
+    Ctx->>Ctx: query_embedding_search()
+    Ctx-->>Tools: [SearchResult...]
+    Tools-->>App: "User mentioned avoiding histamine..."
 
-    await ctx.close()
+    App->>LLM: messages + tool_result
+    LLM-->>App: "You said you avoid histamine-rich foods"
+    App->>Ctx: add_message(response)
+```
 
-asyncio.run(main())
+### Saving Notes (persistent + working)
+
+```mermaid
+sequenceDiagram
+    participant LLM as LLM
+    participant App as Application
+    participant Ctx as Contexo
+    participant WM as Working Memory
+    participant PM as Persistent Memory
+    participant DB as Storage
+
+    Note over LLM: LLM: "I should remember this"
+
+    LLM->>App: save_note("User is allergic to peanuts")
+    App->>Ctx: add_message(content, metadata={note, user_profile})
+
+    par Saves to both memories
+        Ctx->>PM: add(entry)
+        PM->>DB: INSERT INTO entries...
+        PM->>PM: generate_embedding()
+    and
+        Ctx->>WM: add(entry, section="user_profile")
+        WM->>WM: add_to_section("user_profile", entry)
+    end
+
+    Ctx-->>App: Saved!
+
+    Note over App,LLM: Next turn...
+
+    App->>Ctx: get_context()
+    Ctx->>WM: list_all()
+    WM-->>Ctx: [all sections including user_profile]
+    Ctx-->>App: context_with_note
+
+    App->>LLM: messages (note is now visible!)
+    LLM->>LLM: Sees: "User is allergic to peanuts"
+```
+
+### Resuming Conversations
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant Ctx as Contexo
+    participant WM as Working Memory
+    participant DB as Storage
+
+    App->>Ctx: continue_conversation("conv-id", max_messages=20)
+    Ctx->>DB: list_entries(collection="conv-id")
+    DB-->>Ctx: [all historical entries]
+
+    Note over Ctx: Sort by timestamp DESC
+
+    Ctx->>Ctx: Take 20 most recent
+
+    loop For each entry (oldest first)
+        Ctx->>WM: add(entry)
+        WM->>WM: assign_section(entry)
+        WM->>WM: add_to_context(entry)
+    end
+
+    Ctx-->>App: 20 messages loaded
+    App->>Ctx: get_context()
+    Ctx->>WM: list_all()
+    WM-->>Ctx: [20 entries ready for LLM]
+```
+
+### Sectioned Memory Flow
+
+```mermaid
+flowchart LR
+    subgraph Input["Messages In"]
+        Sys["System<br/>Prompt"]
+        User["User Msg"]
+        Asst["Assistant"]
+        RAG["RAG<br/>Context"]
+        Tool["Tool<br/>Calls"]
+    end
+
+    subgraph Sections["Sectioned Working Memory"]
+        direction TB
+        SysSec["system<br/>500 tokens<br/>pinned"]
+        ConvSec["conversation<br/>12000 tokens"]
+        RAGSec["rag_context<br/>2000 tokens"]
+        ToolSec["tools<br/>1000 tokens"]
+    end
+
+    subgraph Output["What LLM Receives"]
+        Ctx["Formatted Context:<br/><br/>system: ...<br/>user: ...<br/>assistant: ..."]
+    end
+
+    Sys -->|auto-routed| SysSec
+    User -->|auto-routed| ConvSec
+    Asst -->|auto-routed| ConvSec
+    RAG -->|manual| RAGSec
+    Tool -->|auto-routed| ToolSec
+
+    SysSec --> Ctx
+    ConvSec --> Ctx
+    RAGSec --> Ctx
+    ToolSec --> Ctx
+
+    style SysSec fill:#90EE90
+    style ConvSec fill:#87CEEB
+    style RAGSec fill:#FFD700
+    style ToolSec fill:#FFA07A
 ```
 
 ## User Memory
@@ -255,6 +488,74 @@ await ctx.add_tool_response(
     result={"temp": 18, "condition": "sunny"}
 )
 ```
+
+## LLM Tool Integration
+
+Contexo can expose memory management as tools to LLMs for autonomous control:
+
+```python
+import json
+from openai import AsyncOpenAI
+from contexo import Contexo, local_config
+
+contexo = Contexo(config=local_config())
+await contexo.initialize()
+
+# Define tools for LLM
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_memory",
+            "description": "Search past conversation history",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_note",
+            "description": "Save important information to memory",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "Information to save"}
+                },
+                "required": ["content"]
+            }
+        }
+    }
+]
+
+client = AsyncOpenAI()
+response = await client.chat.completions.create(
+    model="gpt-4",
+    messages=[...],
+    tools=tools
+)
+
+# Handle tool calls
+if response.choices[0].message.tool_calls:
+    for tool_call in response.choices[0].message.tool_calls:
+        if tool_call.function.name == "search_memory":
+            results = await contexo.search_memory(
+                query=json.loads(tool_call.function.arguments)["query"]
+            )
+        elif tool_call.function.name == "save_note":
+            await contexo.add_message(
+                content=json.loads(tool_call.function.arguments)["content"],
+                role="system",
+                metadata={"type": "note", "section": "user_profile"}
+            )
+```
+
+**Recommended approach:** Handle core conversation flow in code, expose search/note tools to LLM for autonomous use.
 
 ## Configuration
 
@@ -350,6 +651,72 @@ pip install contexo[opentelemetry]
 - **Grafana Tempo** — Query and visualize traces
 - **Any OTLP backend** — Send to your observability platform
 
+## Multi-Agent Systems
+
+Contexo supports multi-agent scenarios where multiple agents need to collaborate while maintaining private thoughts:
+
+```python
+from dataclasses import replace
+from contexo import Contexo
+from contexo.config.defaults import local_config
+
+# Enable multi-agent mode
+config = replace(local_config(), multi_agent=True)
+ctx = Contexo(config=config)
+await ctx.initialize()
+
+# Agent 1: Researcher adds a private thought
+await ctx.add_thought(
+    "User prefers Python over JavaScript",
+    agent_id="researcher"
+)
+
+# Agent 1 adds a shared contribution
+await ctx.add_contribution(
+    "Recommended Python stack: FastAPI + SQLAlchemy",
+    agent_id="researcher"
+)
+
+# Agent 2: Architect makes a decision
+await ctx.add_decision(
+    "DECISION: Using FastAPI for the backend",
+    agent_id="architect"
+)
+
+# Get what each agent sees
+researcher_view = await ctx.get_agent_context("researcher", scope="all")  # Private + shared
+shared_only = await ctx.get_agent_context("researcher", scope="shared")   # Only shared
+```
+
+**Message Scopes:**
+- `thought` — Private reasoning (visible only to that agent)
+- `contribution` — Shared information (visible to all agents)
+- `decision` — High-priority shared outcome
+
+**Context Views:**
+- `scope="all"` — Agent's private thoughts + shared context
+- `scope="shared"` — Only shared context (contributions, decisions)
+- `scope="private"` — Only this agent's private thoughts
+
+**Corrections & Learning:**
+
+```python
+# Save a correction for future use (OpenAI: "Memories can also be manually created")
+await ctx.add_message(
+    content="For 'user count' queries, always filter by logged_in=true",
+    metadata={
+        "type": "correction",
+        "scope": "shared",  # Available to all agents
+        "original_query": "user count"
+    },
+    importance=0.9
+)
+
+# Retrieve with relevant corrections surfaced first
+corrections = await ctx.search_memory("user count", limit=3)
+context = await ctx.get_context()
+```
+
 ## Integrations
 
 ### LangChain
@@ -386,14 +753,6 @@ pre-commit install
 
 # Run all checks (lint, format, test)
 ./scripts/check.sh
-```
-
-# Pre-commit hooks (optional)
-pip install pre-commit && pre-commit install
-
-# Run checks manually
-./scripts/check.sh
-```
 ```
 
 ## Contributing

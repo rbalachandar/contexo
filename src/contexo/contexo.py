@@ -176,6 +176,11 @@ class Contexo:
         """Get the current conversation ID."""
         return self._conversation_id
 
+    @property
+    def multi_agent(self) -> bool:
+        """Check if multi-agent mode is enabled."""
+        return self._config.multi_agent
+
     def set_conversation_id(self, conversation_id: str) -> None:
         """Set the conversation ID for future entries.
 
@@ -362,22 +367,164 @@ class Contexo:
                 metadata={"entry_type": entry.entry_type.value},
             )
 
+    # ==================== Multi-Agent Helper Methods ====================
+
+    @trace_async_method("contexo.add_thought", {"entry_type": "thought"})
+    async def add_thought(
+        self,
+        content: str,
+        agent_id: str,
+        importance: float = 0.3,
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryEntry:
+        """Add a private thought (visible only to this agent).
+
+        Args:
+            content: The thought content
+            agent_id: ID of the agent having this thought
+            importance: Importance score (default: 0.3 for private thoughts)
+            metadata: Additional metadata
+
+        Returns:
+            The created memory entry
+        """
+        entry = MemoryEntry(
+            entry_type=EntryType.MESSAGE,
+            content=content,
+            metadata={
+                "role": "thought",
+                "agent_id": agent_id,
+                "scope": "private",
+                **(metadata or {}),
+            },
+            importance_score=importance,
+            conversation_id=self._conversation_id,
+        )
+        await self._add_to_memory(entry)
+        return entry
+
+    @trace_async_method("contexo.add_contribution", {"entry_type": "contribution"})
+    async def add_contribution(
+        self,
+        content: str,
+        agent_id: str,
+        importance: float = 0.7,
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryEntry:
+        """Add a contribution (shared with all agents).
+
+        Args:
+            content: The contribution content
+            agent_id: ID of the agent making this contribution
+            importance: Importance score (default: 0.7 for contributions)
+            metadata: Additional metadata
+
+        Returns:
+            The created memory entry
+        """
+        entry = MemoryEntry(
+            entry_type=EntryType.MESSAGE,
+            content=content,
+            metadata={
+                "role": "contribution",
+                "agent_id": agent_id,
+                "scope": "shared",
+                **(metadata or {}),
+            },
+            importance_score=importance,
+            conversation_id=self._conversation_id,
+        )
+        await self._add_to_memory(entry)
+        return entry
+
+    @trace_async_method("contexo.add_decision", {"entry_type": "decision"})
+    async def add_decision(
+        self,
+        content: str,
+        agent_id: str,
+        importance: float = 0.9,
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryEntry:
+        """Add a decision (shared, high-priority outcome).
+
+        Args:
+            content: The decision content
+            agent_id: ID of the agent making this decision
+            importance: Importance score (default: 0.9 for decisions)
+            metadata: Additional metadata
+
+        Returns:
+            The created memory entry
+        """
+        entry = MemoryEntry(
+            entry_type=EntryType.MESSAGE,
+            content=content,
+            metadata={
+                "role": "decision",
+                "agent_id": agent_id,
+                "scope": "shared",
+                **(metadata or {}),
+            },
+            importance_score=importance,
+            conversation_id=self._conversation_id,
+        )
+        await self._add_to_memory(entry)
+        return entry
+
+    async def get_agent_context(
+        self,
+        agent_id: str,
+        scope: str = "all",
+    ) -> str:
+        """Get context filtered for a specific agent.
+
+        Args:
+            agent_id: ID of the agent
+            scope: One of "all" (default), "private", "shared"
+
+        Returns:
+            Formatted context string for this agent
+        """
+        if scope == "private":
+            # Only this agent's private thoughts + shared context
+            return await self.get_context(
+                agent_id=agent_id,
+                scope="private",
+            ) + "\n" + await self.get_context(
+                scope="shared",
+            )
+        elif scope == "shared":
+            # Only shared context (contributions, decisions, user messages)
+            return await self.get_context(
+                scope="shared",
+            )
+        else:
+            # All: private + shared
+            return await self.get_context()
+
     @trace_async_method("contexo.get_context")
     async def get_context(
         self,
         include_summaries: bool = True,
         max_tokens: int | None = None,
+        agent_id: str | None = None,
+        scope: str | None = None,
     ) -> str:
         """Get the current context as a formatted string.
 
         Args:
             include_summaries: Whether to include summarized entries
             max_tokens: Optional maximum tokens to include
+            agent_id: Filter by agent_id (multi-agent mode)
+            scope: Filter by scope (e.g., "private", "shared", "all")
 
         Returns:
             Formatted context string
         """
-        entries = await self._working.list_all()
+        entries = await self._working.list_all(
+            agent_id=agent_id,
+            scope=scope,
+        )
 
         if not include_summaries:
             entries = [e for e in entries if e.entry_type != EntryType.SUMMARIZED]

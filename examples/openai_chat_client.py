@@ -10,6 +10,7 @@ Supports:
 """
 
 import asyncio
+import json
 import os
 import sys
 from typing import Any
@@ -365,8 +366,8 @@ async def chat_with_memory():
             messages = [
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant with access to conversation history. "
-                    "Be conversational and reference past context when relevant.",
+                    "content": "You are a helpful assistant with access to conversation history and memory tools. "
+                    "Use tools when you need to search past context or save important information.",
                 },
             ]
 
@@ -380,24 +381,113 @@ async def chat_with_memory():
             # Add current user message
             messages.append({"role": "user", "content": user_input})
 
-            # Call LLM
+            # Define tools for the LLM
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_memory",
+                        "description": "Search past conversation history for relevant context. "
+                        "Use this when you need to recall what was discussed earlier.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Search query to find relevant past messages"
+                                }
+                            },
+                            "required": ["query"]
+                        }
+                    }
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "save_note",
+                        "description": "Save an important fact or information to memory. "
+                        "Use this to remember user preferences, important details, or things to recall later.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "content": {
+                                    "type": "string",
+                                    "description": "The information to save to memory"
+                                }
+                            },
+                            "required": ["content"]
+                        }
+                    }
+                },
+            ]
+
+            # Call LLM (with tools, no streaming for tool handling)
             print("Assistant: ", end="", flush=True)
 
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
+                tools=tools,
                 temperature=0.7,
                 max_tokens=500,
-                stream=True,
             )
 
-            # Stream and collect the response
-            assistant_message = ""
-            async for chunk in response:
-                if chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
-                    print(content, end="", flush=True)
-                    assistant_message += content
+            response_message = response.choices[0].message
+            tool_calls = response_message.tool_calls
+
+            # Handle tool calls
+            if tool_calls:
+                # Process each tool call
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+
+                    if function_name == "search_memory":
+                        results = await contexo.search_memory(
+                            query=function_args["query"],
+                            limit=5
+                        )
+                        tool_result = "\n".join([
+                            f"- {r.entry.content[:100]}..."
+                            for r in results
+                        ]) if results else "No results found"
+
+                    elif function_name == "save_note":
+                        await contexo.add_message(
+                            content=function_args["content"],
+                            role="system",
+                            metadata={"type": "note", "section": "user_profile"}
+                        )
+                        tool_result = f"Saved note: {function_args['content'][:50]}..."
+
+                    # Add tool response to messages
+                    messages.append({
+                        "role": "assistant",
+                        "tool_calls": [{"id": tool_call.id, "type": tool_call.type, "function": {
+                            "name": function_name,
+                            "arguments": tool_call.function.arguments
+                        }}]
+                    })
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result
+                    })
+
+                # Get final response from LLM after tool execution
+                final_response = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=500,
+                )
+                assistant_message = final_response.choices[0].message.content or ""
+                print(assistant_message)
+
+            else:
+                # No tool calls, just use the response directly
+                assistant_message = response_message.content or ""
+                print(assistant_message)
 
             print()  # New line
 
