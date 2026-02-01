@@ -615,6 +615,8 @@ class WorkingMemory(MemoryManager):
         limit: int | None = None,
         entry_type: EntryType | None = None,
         section: str | None = None,
+        agent_id: str | None = None,
+        scope: str | None = None,
     ) -> list[MemoryEntry]:
         """List entries in working memory.
 
@@ -622,6 +624,8 @@ class WorkingMemory(MemoryManager):
             limit: Maximum number of entries to return
             entry_type: Filter by entry type
             section: Filter by section
+            agent_id: Filter by agent_id metadata (multi-agent mode)
+            scope: Filter by scope metadata (e.g., "private", "shared")
 
         Returns:
             List of entries
@@ -633,6 +637,13 @@ class WorkingMemory(MemoryManager):
 
         if section is not None:
             entries = [e for e in entries if self._entry_sections.get(e.id, "default") == section]
+
+        # Multi-agent filtering
+        if agent_id is not None:
+            entries = [e for e in entries if e.metadata and e.metadata.get("agent_id") == agent_id]
+
+        if scope is not None:
+            entries = [e for e in entries if e.metadata and e.metadata.get("scope") == scope]
 
         if limit:
             entries = entries[:limit]

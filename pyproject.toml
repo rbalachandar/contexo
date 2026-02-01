@@ -34,8 +34,9 @@ sqlite = ["aiosqlite>=0.19"]
 postgresql = ["asyncpg>=0.29"]
 redis = ["redis>=5.0"]
 neo4j = ["neo4j>=5.0"]
+opentelemetry = ["opentelemetry-api>=1.20", "opentelemetry-sdk>=1.20"]
 all = [
-    "contexo[openai,cohere,sentence-transformers,sqlite,postgresql,redis,neo4j]",
+    "contexo[openai,cohere,sentence-transformers,sqlite,postgresql,redis,neo4j,opentelemetry]",
 ]
 dev = [
     "contexo[all]",

@@ -34,19 +34,27 @@ def create_compaction_strategy(strategy_type: str, **kwargs: Any) -> CompactionS
     strategy_type = strategy_type.lower().replace("-", "_")
 
     if strategy_type in ("passthrough", "none"):
-        return PassthroughStrategy(**kwargs)
+        return PassthroughStrategy()
 
     if strategy_type in ("sliding_window", "fifo"):
-        return SlidingWindowStrategy(**kwargs)
+        return SlidingWindowStrategy()
 
     if strategy_type == "summarization":
-        return SummarizationStrategy(**kwargs)
+        # SummarizationStrategy accepts summary_target_tokens
+        return SummarizationStrategy(
+            summary_target_tokens=kwargs.get("summary_target_tokens"),
+        )
 
     if strategy_type in ("llm_summarization", "llm"):
-        return LLMSummarizationStrategy(**kwargs)
+        # LLMSummarizationStrategy accepts summary_target_tokens and recency_bias
+        return LLMSummarizationStrategy(
+            summary_target_tokens=kwargs.get("summary_target_tokens"),
+            recency_bias=kwargs.get("recency_bias"),
+        )
 
     if strategy_type == "importance":
-        return ImportanceStrategy(**kwargs)
+        # ImportanceStrategy accepts recency_bias
+        return ImportanceStrategy(recency_bias=kwargs.get("recency_bias"))
 
     raise ValueError(f"Unknown compaction strategy type: {strategy_type}")
 

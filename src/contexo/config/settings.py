@@ -59,6 +59,7 @@ class ContexoConfig:
         auto_initialize: Whether to auto-initialize on creation
         enable_provenance: Whether to track provenance
         conversation_id: Default conversation ID for entries
+        multi_agent: Enable multi-agent mode with agent_id and scope metadata
     """
 
     storage: StorageConfig = field(default_factory=StorageConfig)
@@ -67,4 +68,5 @@ class ContexoConfig:
     auto_initialize: bool = True
     enable_provenance: bool = False
     conversation_id: str | None = None
+    multi_agent: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
