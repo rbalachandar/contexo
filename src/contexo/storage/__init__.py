@@ -70,8 +70,11 @@ def create_storage(backend_type: str, **kwargs: Any) -> StorageBackend:
             raise ImportError(
                 "aiosqlite is required for SQLite storage. Install with: pip install aiosqlite"
             )
-        # SQLiteStorage expects db_path
-        return SQLiteStorage(db_path=kwargs.get("db_path", ":memory:"))
+        # SQLiteStorage expects db_path, optionally fts_fetch_multiplier
+        return SQLiteStorage(
+            db_path=kwargs.get("db_path", ":memory:"),
+            fts_fetch_multiplier=kwargs.get("fts_fetch_multiplier"),
+        )
 
     if backend_type in ("graphdb", "neo4j"):
         if not _graphdb_available:

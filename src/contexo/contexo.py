@@ -93,6 +93,7 @@ class Contexo:
             storage=self._storage,
             embedding_provider=self._embedding_provider,
             auto_embed=True,
+            retrieval_config=self._config.retrieval,
         )
 
         # Provenance tracking

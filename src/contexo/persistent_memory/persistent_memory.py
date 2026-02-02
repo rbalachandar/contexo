@@ -26,6 +26,7 @@ class PersistentMemory(MemoryManager):
         storage: StorageBackend | None = None,
         embedding_provider: EmbeddingProvider | None = None,
         auto_embed: bool = True,
+        retrieval_config: Any | None = None,  # Avoid circular import
     ) -> None:
         """Initialize the persistent memory.
 
@@ -33,10 +34,12 @@ class PersistentMemory(MemoryManager):
             storage: Storage backend to use (defaults to InMemoryStorage)
             embedding_provider: Embedding provider for semantic search
             auto_embed: Whether to automatically generate embeddings on save
+            retrieval_config: RetrievalConfig for hybrid search weights and limits
         """
         self._storage = storage or InMemoryStorage()
         self._embedding_provider = embedding_provider or MockEmbeddings()
         self._auto_embed = auto_embed
+        self._retrieval_config = retrieval_config
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -229,25 +232,310 @@ class PersistentMemory(MemoryManager):
         if not self._initialized:
             raise RuntimeError("Persistent memory not initialized")
 
-        # Try semantic search if supported
-        if self._storage.supports_semantic_search:
-            return await self._semantic_search(
+        results = []
+
+        # Use hybrid search: semantic + BM25 when embeddings are available
+        if type(self._embedding_provider).__name__ != "MockEmbeddings" and self._storage.supports_fts:
+            results = await self._hybrid_search(
                 query=query,
                 limit=limit,
                 entry_type=entry_type,
                 conversation_id=conversation_id,
                 min_score=min_score,
             )
+        # Semantic-only search (no FTS support)
+        elif type(self._embedding_provider).__name__ != "MockEmbeddings":
+            results = await self._semantic_search(
+                query=query,
+                limit=limit,
+                entry_type=entry_type,
+                conversation_id=conversation_id,
+                min_score=min_score,
+            )
+        else:
+            # Fall back to full-text search for mock embeddings
+            search_query = SearchQuery(
+                query=query,
+                limit=limit,
+                entry_type=entry_type,
+                conversation_id=conversation_id,
+                min_score=min_score,
+            )
+            results = await self._storage.search(search_query)
 
-        # Fall back to full-text search
-        search_query = SearchQuery(
+        # Apply temporal reranking for "when" questions
+        results = self._rerank_temporal(query, results)
+
+        return results
+
+    def _is_temporal_query(self, query: str) -> bool:
+        """Detect if query is asking about time/temporal information."""
+        import re
+        temporal_patterns = [
+            r'\bwhen\b',
+            r'\btime\b',
+            r'\bago\b',
+            r'\bdate\b',
+            r'\b(year|month|week|day)\b',
+            r'\bbefore\b',
+            r'\bafter\b',
+            r'\bduring\b',
+        ]
+        return any(re.search(pattern, query.lower()) for pattern in temporal_patterns)
+
+    def _rerank_temporal(self, query: str, results: list[SearchResult]) -> list[SearchResult]:
+        """Rerank results for temporal queries.
+
+        Boosts entries with:
+        - Session metadata (chronological order)
+        - Temporal expressions in content
+        - More recent timestamps
+
+        Args:
+            query: The search query
+            results: Initial search results
+
+        Returns:
+            Reranked search results
+        """
+        if not self._is_temporal_query(query):
+            return results
+
+        # Check if temporal reranking is enabled
+        if self._retrieval_config and not self._retrieval_config.enable_temporal_rerank:
+            return results
+
+        # Get boost factors from config or use defaults
+        if self._retrieval_config:
+            session_boost = self._retrieval_config.temporal_session_boost
+            content_boost = self._retrieval_config.temporal_content_boost
+        else:
+            session_boost = 0.15
+            content_boost = 0.10
+
+        # Get session numbers from metadata (higher = more recent)
+        results_with_boost = []
+        for r in results:
+            boost = 1.0
+
+            # Check for session metadata (session_1, session_2, etc.)
+            session = r.entry.metadata.get("session", "")
+            if session:
+                # Extract session number and boost recent sessions
+                import re
+                match = re.search(r'session_(\d+)', session)
+                if match:
+                    session_num = int(match.group(1))
+                    # Normalize: later sessions get boost
+                    boost += (session_num * session_boost / 20)
+
+            # Check for temporal expressions in content
+            content_lower = r.entry.content.lower()
+            temporal_words = ["yesterday", "today", "ago", "recently", "last", "past",
+                            "year", "month", "week", "day", "hour", "time", "date"]
+            if any(word in content_lower for word in temporal_words):
+                boost += content_boost
+
+            # Apply boost
+            results_with_boost.append(
+                SearchResult(
+                    entry=r.entry,
+                    score=r.score * boost,
+                    metadata={
+                        **r.metadata,
+                        "rerank_method": "temporal",
+                        "original_score": r.score,
+                        "boost_factor": boost,
+                    },
+                )
+            )
+
+        # Sort by boosted scores
+        results_with_boost.sort(key=lambda x: x.score, reverse=True)
+        return results_with_boost
+
+    async def _hybrid_search(
+        self,
+        query: str,
+        limit: int = 10,
+        entry_type: EntryType | None = None,
+        conversation_id: str | None = None,
+        min_score: float = 0.0,
+    ) -> list[SearchResult]:
+        """Hybrid search combining semantic embeddings, BM25, and substring matching.
+
+        Combines scores using configurable weights (default: 2.0 * semantic + 0.3 * bm25 + 0.3 * string)
+        Based on MemU's approach which heavily weights semantic search.
+
+        Args:
+            query: The search query
+            limit: Maximum number of results
+            entry_type: Filter by entry type
+            conversation_id: Filter by conversation ID
+            min_score: Minimum relevance score
+
+        Returns:
+            List of search results
+        """
+        # Get weights from config or use MemU's defaults
+        if self._retrieval_config:
+            semantic_weight = self._retrieval_config.semantic_weight
+            bm25_weight = self._retrieval_config.bm25_weight
+            string_weight = self._retrieval_config.string_weight
+            multiplier = self._retrieval_config.hybrid_candidate_multiplier
+        else:
+            # MemU's default weights
+            semantic_weight = 2.0
+            bm25_weight = 0.3
+            string_weight = 0.3
+            multiplier = 3
+
+        # Get more candidates from each method, then combine and rerank
+        semantic_limit = limit * multiplier
+        bm25_limit = limit * multiplier
+
+        # Run all three searches in parallel
+        import asyncio
+
+        semantic_task = self._semantic_search(
             query=query,
-            limit=limit,
+            limit=semantic_limit,
             entry_type=entry_type,
             conversation_id=conversation_id,
-            min_score=min_score,
+            min_score=0.0,
         )
-        return await self._storage.search(search_query)
+
+        bm25_query = SearchQuery(
+            query=query,
+            limit=bm25_limit,
+            entry_type=entry_type,
+            conversation_id=conversation_id,
+            min_score=0.0,
+        )
+        bm25_task = self._storage.search(bm25_query)
+
+        string_task = self._substring_search(
+            query=query,
+            limit=bm25_limit,
+            entry_type=entry_type,
+            conversation_id=conversation_id,
+        )
+
+        semantic_results, bm25_results, string_results = await asyncio.gather(
+            semantic_task, bm25_task, string_task
+        )
+
+        # Combine scores by entry ID
+        combined_scores: dict[str, dict] = {}
+
+        for result in semantic_results:
+            entry_id = result.entry.id
+            if entry_id not in combined_scores:
+                combined_scores[entry_id] = {"entry": result.entry, "semantic": 0.0, "bm25": 0.0, "string": 0.0}
+            combined_scores[entry_id]["semantic"] = result.score * semantic_weight
+
+        for result in bm25_results:
+            entry_id = result.entry.id
+            if entry_id not in combined_scores:
+                combined_scores[entry_id] = {"entry": result.entry, "semantic": 0.0, "bm25": 0.0, "string": 0.0}
+            combined_scores[entry_id]["bm25"] = result.score * bm25_weight
+
+        for result in string_results:
+            entry_id = result.entry.id
+            if entry_id not in combined_scores:
+                combined_scores[entry_id] = {"entry": result.entry, "semantic": 0.0, "bm25": 0.0, "string": 0.0}
+            combined_scores[entry_id]["string"] = result.score * string_weight
+
+        # Build final results with combined scores
+        results = []
+        for entry_id, scores in combined_scores.items():
+            combined_score = scores["semantic"] + scores["bm25"] + scores["string"]
+            if combined_score >= min_score:
+                results.append(
+                    SearchResult(
+                        entry=scores["entry"],
+                        score=combined_score,
+                        metadata={
+                            "search_method": "hybrid",
+                            "semantic_score": scores["semantic"] / semantic_weight if semantic_weight else 0,
+                            "bm25_score": scores["bm25"] / bm25_weight if bm25_weight else 0,
+                            "string_score": scores["string"] / string_weight if string_weight else 0,
+                        },
+                    )
+                )
+
+        # Sort by combined score and return top results
+        results.sort(key=lambda r: r.score, reverse=True)
+        return results[:limit]
+
+    async def _substring_search(
+        self,
+        query: str,
+        limit: int = 30,
+        entry_type: EntryType | None = None,
+        conversation_id: str | None = None,
+    ) -> list[SearchResult]:
+        """Substring/exact match search for keyword-based retrieval.
+
+        Scores based on:
+        - Exact phrase match: 1.0
+        - Partial word match: 0.7
+        - Single word match: 0.5
+
+        Args:
+            query: The search query
+            limit: Maximum number of results
+            entry_type: Filter by entry type
+            conversation_id: Filter by conversation ID
+
+        Returns:
+            List of search results
+        """
+        # Clean query: remove special chars, keep words
+        import re
+        words = re.findall(r'\w+', query.lower())
+        if not words:
+            return []
+
+        # Get all candidate entries
+        candidates = await self._storage.list_entries(
+            collection=conversation_id,
+            entry_type=entry_type,
+        )
+
+        # Score based on substring matches
+        results = []
+        query_lower = query.lower()
+
+        for entry in candidates:
+            content_lower = entry.content.lower()
+            score = 0.0
+
+            # Exact phrase match (highest score)
+            if query_lower in content_lower:
+                score = 1.0
+            else:
+                # Count word matches
+                matched_words = sum(1 for w in words if w in content_lower)
+                if matched_words == len(words):
+                    # All words matched (phrase broken up)
+                    score = 0.8
+                elif matched_words > 0:
+                    # Partial match
+                    score = 0.3 + (0.5 * matched_words / len(words))
+
+            if score > 0:
+                results.append(
+                    SearchResult(
+                        entry=entry,
+                        score=score,
+                        metadata={"search_method": "substring"},
+                    )
+                )
+
+        # Sort by score and return top results
+        results.sort(key=lambda r: r.score, reverse=True)
+        return results[:limit]
 
     async def _semantic_search(
         self,
@@ -298,7 +586,16 @@ class PersistentMemory(MemoryManager):
 
         # Sort by score descending and limit
         results.sort(key=lambda r: r.score, reverse=True)
-        return results[:limit]
+
+        # Deduplicate by entry ID (keep highest score)
+        seen_ids = set()
+        deduplicated = []
+        for r in results:
+            if r.entry.id not in seen_ids:
+                seen_ids.add(r.entry.id)
+                deduplicated.append(r)
+
+        return deduplicated[:limit]
 
     async def find_related(
         self,

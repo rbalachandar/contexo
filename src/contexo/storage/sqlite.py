@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
+import pickle
+import re
 from typing import Any
 
 import aiosqlite
@@ -15,6 +18,37 @@ from contexo.storage.base import (
     StorageBackend,
 )
 
+logger = logging.getLogger(__name__)
+
+
+def _escape_fts5(query: str) -> str:
+    """Escape query for FTS5 MATCH syntax.
+
+    FTS5 treats certain characters as operators. We remove them
+    and use token-based search (not phrase search) for better recall.
+
+    WARNING: Uses string interpolation for MATCH because FTS5 doesn't
+    support parameter binding for MATCH queries. The query is sanitized
+    by removing all non-alphanumeric characters except spaces and underscores.
+
+    Args:
+        query: The raw search query
+
+    Returns:
+        Sanitized query string safe for FTS5 MATCH, or first 50 chars
+        if sanitization results in empty string
+    """
+    # Remove all non-alphanumeric characters except basic safe punctuation
+    # Keep only: letters, numbers, spaces, underscore
+    # Remove colons to avoid column:term syntax interpretation
+    cleaned = re.sub(r'[^\w\s_]', ' ', query)
+    # Collapse multiple spaces
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    # Fallback if query becomes empty
+    if not cleaned:
+        cleaned = query[:50]  # Use first 50 chars as fallback
+    return cleaned
+
 
 class SQLiteStorage(StorageBackend):
     """SQLite storage backend with FTS5 full-text search support.
@@ -23,13 +57,20 @@ class SQLiteStorage(StorageBackend):
     search capabilities using FTS5.
     """
 
-    def __init__(self, db_path: str = ":memory:") -> None:
+    # Default multiplier for FTS fetch (extra candidates for min_score filtering)
+    DEFAULT_FTS_FETCH_MULTIPLIER: int = 5
+
+    def __init__(self, db_path: str = ":memory:", fts_fetch_multiplier: int | None = None) -> None:
         """Initialize the SQLite storage backend.
 
         Args:
             db_path: Path to the SQLite database file. Use ":memory:" for in-memory.
+            fts_fetch_multiplier: Multiplier for FTS candidate retrieval (default: 5).
+                Higher values (e.g., 10) help with min_score filtering but are slower.
+                Production: use 5, Benchmarks: use 10.
         """
         self.db_path = db_path
+        self.fts_fetch_multiplier = fts_fetch_multiplier or self.DEFAULT_FTS_FETCH_MULTIPLIER
         self._conn: aiosqlite.Connection | None = None
         self._initialized = False
 
@@ -64,30 +105,28 @@ class SQLiteStorage(StorageBackend):
         # Create FTS5 virtual table for full-text search
         await self._conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
-                id, content, metadata,
-                content='entries',
-                content_rowid='rowid'
+                docid, id, content, metadata
             )
             """)
 
         # Create triggers to keep FTS index updated
         await self._conn.execute("""
             CREATE TRIGGER IF NOT EXISTS entries_ai AFTER INSERT ON entries BEGIN
-                INSERT INTO entries_fts(rowid, id, content, metadata)
+                INSERT INTO entries_fts(docid, id, content, metadata)
                 VALUES (new.rowid, new.id, new.content, new.metadata);
             END
             """)
 
         await self._conn.execute("""
             CREATE TRIGGER IF NOT EXISTS entries_ad AFTER DELETE ON entries BEGIN
-                DELETE FROM entries_fts WHERE rowid = old.rowid;
+                DELETE FROM entries_fts WHERE docid = old.rowid;
             END
             """)
 
         await self._conn.execute("""
             CREATE TRIGGER IF NOT EXISTS entries_au AFTER UPDATE ON entries BEGIN
                 UPDATE entries_fts SET content = new.content, metadata = new.metadata
-                WHERE rowid = new.rowid;
+                WHERE docid = new.rowid;
             END
             """)
 
@@ -134,8 +173,6 @@ class SQLiteStorage(StorageBackend):
 
         embedding_blob = None
         if entry.embedding:
-            import pickle
-
             embedding_blob = pickle.dumps(entry.embedding)
 
         metadata_json = json.dumps(entry.metadata) if entry.metadata else None
@@ -237,36 +274,46 @@ class SQLiteStorage(StorageBackend):
         if not self.is_initialized:
             raise StorageError("Storage backend not initialized")
 
-        # Build the FTS5 query
-        sql = """
-            SELECT e.*, bm25(entries_fts) as rank
-            FROM entries e
-            INNER JOIN entries_fts fts ON e.id = fts.id
-            WHERE entries_fts MATCH ?
-        """
-        params: list[Any] = [query.query]
+        # Escape query for FTS5 MATCH syntax
+        fts_query = _escape_fts5(query.query)
 
-        # Add filters
+        # Use string interpolation for MATCH (FTS5 doesn't support param binding)
+        # Safe because _escape_fts5() removes all special characters except spaces/underscores
+        # Use subquery approach instead of JOIN for better FTS5 compatibility
+        where_clauses = []
+        params: list[Any] = []
+
         if query.entry_type is not None:
-            sql += " AND e.entry_type = ?"
+            where_clauses.append("e.entry_type = ?")
             params.append(query.entry_type.value)
 
         if query.conversation_id is not None:
-            sql += " AND e.conversation_id = ?"
+            where_clauses.append("e.conversation_id = ?")
             params.append(query.conversation_id)
 
         if query.parent_id is not None:
-            sql += " AND e.parent_id = ?"
+            where_clauses.append("e.parent_id = ?")
             params.append(query.parent_id)
 
-        # Add minimum score filter
-        if query.min_score > 0:
-            # BM25 scores are negative, so we invert the threshold
-            sql += " AND bm25(entries_fts) <= ?"
-            params.append(-query.min_score)
+        where_sql = " AND " + " AND ".join(where_clauses) if where_clauses else ""
 
-        sql += " ORDER BY rank LIMIT ?"
-        params.append(query.limit)
+        # Get matching IDs with BM25 scores first, then join with entries
+        # Get extra candidates since we filter by min_score after scoring
+        candidate_limit = query.limit * self.fts_fetch_multiplier
+
+        sql = f"""
+            SELECT e.*, fts.rank
+            FROM entries e
+            INNER JOIN (
+                SELECT id, bm25(entries_fts) as rank
+                FROM entries_fts
+                WHERE entries_fts MATCH '{fts_query}'
+                LIMIT ?
+            ) fts ON e.id = fts.id
+            WHERE 1=1 {where_sql}
+            ORDER BY fts.rank
+        """
+        params.insert(0, candidate_limit)
 
         cursor = await self._conn.execute(sql, params)  # type: ignore
         rows = await cursor.fetchall()
@@ -281,7 +328,12 @@ class SQLiteStorage(StorageBackend):
             relevance = relevance * (0.5 + entry.importance_score * 0.5)
             results.append(SearchResult(entry=entry, score=relevance))
 
-        return results
+        # Apply minimum score filter
+        if query.min_score > 0:
+            results = [r for r in results if r.score >= query.min_score]
+
+        # Return at most query.limit results, after filtering
+        return results[:query.limit]
 
     async def list_collections(self) -> list[str]:
         """List all available conversation IDs as collections.
@@ -410,21 +462,19 @@ class SQLiteStorage(StorageBackend):
         Returns:
             A MemoryEntry instance
         """
-        import pickle
-
         embedding = None
         if row["embedding"]:
             try:
                 embedding = pickle.loads(row["embedding"])
-            except (pickle.PickleError, TypeError):
-                pass
+            except (pickle.PickleError, TypeError) as e:
+                logger.warning(f"Failed to deserialize embedding for entry {row.get('id', 'unknown')}: {e}")
 
         metadata = {}
         if row["metadata"]:
             try:
                 metadata = json.loads(row["metadata"])
-            except (json.JSONDecodeError, TypeError):
-                pass
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to deserialize metadata for entry {row.get('id', 'unknown')}: {e}")
 
         return MemoryEntry(
             id=row["id"],
