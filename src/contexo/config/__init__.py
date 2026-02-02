@@ -12,6 +12,7 @@ from contexo.config.defaults import (
 from contexo.config.settings import (
     ContexoConfig,
     EmbeddingConfig,
+    RetrievalConfig,
     StorageConfig,
     WorkingMemoryConfig,
 )
@@ -30,4 +31,5 @@ __all__ = [
     "StorageConfig",
     "EmbeddingConfig",
     "WorkingMemoryConfig",
+    "RetrievalConfig",
 ]

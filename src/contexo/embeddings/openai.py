@@ -92,11 +92,12 @@ class OpenAIEmbeddings(EmbeddingProvider):
             raise EmbeddingError("Embedding provider not initialized")
 
         try:
-            response = await self._client.embeddings.create(  # type: ignore
-                model=self._model,
-                input=text,
-                dimensions=self._requested_dimension,
-            )
+            # Only pass dimensions if explicitly set (API doesn't accept None)
+            params = {"model": self._model, "input": text}
+            if self._requested_dimension is not None:
+                params["dimensions"] = self._requested_dimension
+
+            response = await self._client.embeddings.create(**params)  # type: ignore
             return response.data[0].embedding
         except Exception as e:
             raise EmbeddingError(f"Failed to generate embedding: {e}") from e
@@ -117,11 +118,12 @@ class OpenAIEmbeddings(EmbeddingProvider):
             return []
 
         try:
-            response = await self._client.embeddings.create(  # type: ignore
-                model=self._model,
-                input=texts,
-                dimensions=self._requested_dimension,
-            )
+            # Only pass dimensions if explicitly set (API doesn't accept None)
+            params = {"model": self._model, "input": texts}
+            if self._requested_dimension is not None:
+                params["dimensions"] = self._requested_dimension
+
+            response = await self._client.embeddings.create(**params)  # type: ignore
             return [item.embedding for item in response.data]
         except Exception as e:
             raise EmbeddingError(f"Failed to generate embeddings: {e}") from e

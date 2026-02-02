@@ -49,6 +49,25 @@ class WorkingMemoryConfig:
 
 
 @dataclass(frozen=True)
+class RetrievalConfig:
+    """Configuration for retrieval and search in persistent memory."""
+
+    # Hybrid search weights (normalized by sum)
+    semantic_weight: float = 2.0
+    bm25_weight: float = 0.3
+    string_weight: float = 0.3
+
+    # Retrieval limits
+    default_limit: int = 10
+    hybrid_candidate_multiplier: int = 3  # Get limit * multiplier candidates from each method
+
+    # Temporal reranking
+    enable_temporal_rerank: bool = True
+    temporal_session_boost: float = 0.15  # Boost per session number
+    temporal_content_boost: float = 0.10  # Boost for temporal words in content
+
+
+@dataclass(frozen=True)
 class ContexoConfig:
     """Main configuration for Contexo.
 
@@ -56,6 +75,7 @@ class ContexoConfig:
         storage: Storage backend configuration
         embeddings: Embedding provider configuration
         working_memory: Working memory configuration
+        retrieval: Retrieval/hybrid search configuration
         auto_initialize: Whether to auto-initialize on creation
         enable_provenance: Whether to track provenance
         conversation_id: Default conversation ID for entries
@@ -65,6 +85,7 @@ class ContexoConfig:
     storage: StorageConfig = field(default_factory=StorageConfig)
     embeddings: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     working_memory: WorkingMemoryConfig = field(default_factory=WorkingMemoryConfig)
+    retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     auto_initialize: bool = True
     enable_provenance: bool = False
     conversation_id: str | None = None

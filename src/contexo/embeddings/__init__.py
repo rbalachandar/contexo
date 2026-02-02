@@ -78,7 +78,15 @@ def create_embedding_provider(provider_type: str, **kwargs: Any) -> EmbeddingPro
             raise ImportError(
                 "openai is required for OpenAI embeddings. Install with: pip install openai"
             )
-        return OpenAIEmbeddings(**kwargs)
+        # OpenAIEmbeddings uses 'model' parameter, but config uses 'model_name'
+        # Also filter out 'device' which is for local models only
+        openai_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k not in ("device", "batch_size")
+        }
+        if "model_name" in openai_kwargs and "model" not in openai_kwargs:
+            openai_kwargs["model"] = openai_kwargs.pop("model_name")
+        return OpenAIEmbeddings(**openai_kwargs)
 
     if provider_type in ("sentence_transformers", "sentencetransformers"):
         if not _sentence_transformers_available:
