@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from contexo.core.context import ContextWindow
@@ -767,6 +768,97 @@ class WorkingMemory(MemoryManager):
                 break
 
         return promoted
+
+
+    # ==================== Snapshot Support ====================
+
+    def create_snapshot(self) -> dict[str, Any]:
+        """Create a snapshot of the current working memory state.
+
+        Returns:
+            Dictionary containing:
+                - timestamp: Unix timestamp of snapshot
+                - entry_ids: List of entry IDs in order
+                - sections: Mapping of entry_id to section_name
+                - token_counts: Mapping of entry_id to token_count
+                - entry_types: Mapping of entry_id to entry_type
+                - total_tokens: Total tokens in working memory
+                - utilization: Current utilization (0.0 to 1.0)
+                - section_stats: Statistics for each section
+        """
+        return {
+            "timestamp": time.time(),
+            "entry_ids": [e.id for e in self._context_window.entries],
+            "sections": dict(self._entry_sections),
+            "token_counts": {e.id: e.token_count for e in self._context_window.entries},
+            "entry_types": {e.id: e.entry_type.value for e in self._context_window.entries},
+            "total_tokens": self._context_window.total_tokens,
+            "utilization": self._context_window.utilization,
+            "section_stats": self._get_section_stats_for_snapshot(),
+        }
+
+    def _get_section_stats_for_snapshot(self) -> dict[str, dict[str, Any]]:
+        """Get section statistics for snapshot.
+
+        Returns:
+            Dict mapping section_name to stats dict
+        """
+        stats = {}
+        for section_name, section_config in self._sections.items():
+            section_entries = [
+                e
+                for e in self._context_window.entries
+                if self._entry_sections.get(e.id, "default") == section_name
+            ]
+            stats[section_name] = {
+                "entry_count": len(section_entries),
+                "token_count": sum(e.token_count for e in section_entries),
+                "max_tokens": section_config.max_tokens,
+                "priority": section_config.priority,
+                "pinned": section_config.pinned,
+            }
+        return stats
+
+    async def restore_snapshot(
+        self,
+        snapshot: dict[str, Any],
+        entries: list[MemoryEntry],
+    ) -> None:
+        """Restore working memory from a snapshot.
+
+        Args:
+            snapshot: Snapshot data from create_snapshot()
+            entries: List of MemoryEntry objects (loaded from persistent storage)
+
+        Raises:
+            RuntimeError: If working memory is not initialized
+        """
+        if not self._initialized:
+            raise RuntimeError("Working memory not initialized")
+
+        # Clear current state
+        self._context_window.clear()
+        self._entry_sections.clear()
+
+        # Create entry lookup
+        entry_map = {e.id: e for e in entries}
+
+        # Restore entries in order
+        for entry_id in snapshot["entry_ids"]:
+            if entry_id not in entry_map:
+                logger.warning(f"Entry {entry_id} not found in provided entries, skipping")
+                continue
+
+            entry = entry_map[entry_id]
+            section = snapshot["sections"].get(entry_id, "default")
+
+            self._context_window.add(entry)
+            self._entry_sections[entry_id] = section
+
+        logger.info(
+            f"Restored working memory: {len(snapshot['entry_ids'])} entries, "
+            f"{snapshot['total_tokens']} tokens"
+        )
 
 
 __all__ = ["WorkingMemory", "SectionConfig", "SectionStats"]
