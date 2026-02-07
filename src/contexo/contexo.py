@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import time
 from typing import Any
 
 from contexo.config.defaults import minimal_config
@@ -99,6 +102,11 @@ class Contexo:
         # Provenance tracking
         self._provenance = ProvenanceTracker() if self._config.enable_provenance else None
 
+        # Snapshot tracking
+        self._message_count = 0
+        self._snapshot_task: asyncio.Task[None] | None = None
+        self._snapshot_scheduled = False
+
         self._initialized = False
 
     def _create_working_memory(self) -> WorkingMemory:
@@ -143,6 +151,13 @@ class Contexo:
         """Close the Contexo context manager and release resources."""
         if not self._initialized:
             return
+
+        # Save snapshot on close if configured
+        if self._config.snapshot.snapshot_on_close:
+            try:
+                await self.save_working_memory_snapshot()
+            except Exception as e:
+                logger.warning(f"Failed to save snapshot on close: {e}")
 
         await self._working.close()
         await self._persistent.close()
@@ -195,16 +210,19 @@ class Contexo:
 
     @trace_async_method("contexo.continue_conversation")
     async def continue_conversation(
-        self, conversation_id: str, max_messages: int = 20
+        self, conversation_id: str, max_messages: int = 20, restore_snapshot: bool = True
     ) -> int:
         """Continue an existing conversation by loading recent history.
 
         This sets the conversation ID and loads the most recent messages
-        from that conversation into working memory.
+        from that conversation into working memory. If a snapshot exists,
+        it will be restored instead of loading recent messages.
 
         Args:
             conversation_id: The conversation ID to continue
             max_messages: Maximum number of recent messages to load (default: 20)
+                Only used if no snapshot is found.
+            restore_snapshot: If True, try to restore from snapshot first (default: True)
 
         Returns:
             The number of messages loaded into working memory
@@ -214,13 +232,20 @@ class Contexo:
             # Start a new conversation (no history)
             contexo.set_conversation_id("new-id")
 
-            # Continue an existing conversation (loads recent history)
+            # Continue an existing conversation (loads snapshot or recent history)
             await contexo.continue_conversation("existing-id", max_messages=10)
             ```
         """
         self._conversation_id = conversation_id
 
-        # Get recent entries from persistent storage
+        # Try to restore from snapshot first
+        if restore_snapshot:
+            context_briefing = await self.restore_working_memory_snapshot()
+            if context_briefing is not None:
+                logger.info(f"Restored working memory from snapshot with context briefing")
+                return len(await self._working.list_all())
+
+        # Fall back to loading recent messages
         all_entries = await self._persistent._storage.list_entries(
             collection=conversation_id, entry_type=None
         )
@@ -367,6 +392,33 @@ class Contexo:
                 entry_ids=[entry.id],
                 metadata={"entry_type": entry.entry_type.value},
             )
+
+        # Schedule auto-snapshot if configured
+        self._message_count += 1
+        if self._config.snapshot.auto_snapshot:
+            interval = self._config.snapshot.snapshot_interval
+            if self._message_count % interval == 0:
+                self._schedule_snapshot()
+
+    def _schedule_snapshot(self) -> None:
+        """Schedule a debounced auto-snapshot.
+
+        Uses debounce delay to avoid excessive snapshots during rapid message bursts.
+        """
+        if self._snapshot_scheduled:
+            return  # Already scheduled
+
+        self._snapshot_scheduled = True
+
+        async def snapshot_with_debounce() -> None:
+            """Execute snapshot after debounce delay."""
+            delay = self._config.snapshot.debounce_delay
+            await asyncio.sleep(delay)
+            self._snapshot_scheduled = False
+            await self._trigger_auto_snapshot()
+
+        # Create task but don't await - runs in background
+        self._snapshot_task = asyncio.create_task(snapshot_with_debounce())
 
     # ==================== Multi-Agent Helper Methods ====================
 
@@ -754,3 +806,240 @@ class Contexo:
             "conversation_id": self._conversation_id,
             "initialized": self._initialized,
         }
+
+    # ==================== Working Memory Snapshot ====================
+
+    async def save_working_memory_snapshot(
+        self,
+        briefing_length: str | None = None,
+    ) -> str:
+        """Save a working memory snapshot with LLM-generated context briefing.
+
+        Snapshots preserve working memory state for crash recovery and conversation
+        resumption. The LLM briefing helps maintain conversation continuity when
+        restoring.
+
+        Args:
+            briefing_length: Length of LLM briefing ("compact", "standard", "detailed")
+                If None, uses config default
+
+        Returns:
+            The snapshot entry ID
+
+        Example:
+            ```python
+            # Save snapshot before important work
+            snapshot_id = await ctx.save_working_memory_snapshot()
+
+            # Later, restore the snapshot
+            await ctx.restore_working_memory_snapshot()
+            ```
+        """
+        if not self._initialized:
+            raise RuntimeError("Contexo not initialized")
+
+        # Capture working memory state
+        snapshot_data = self._working.create_snapshot()
+
+        # Generate LLM context briefing
+        briefing_length = briefing_length or self._config.snapshot.briefing_length
+        entries = await self._working.list_all()
+
+        # For now, create a simple briefing without LLM call
+        # (LLM call can be added later with OpenAI/Anthropic integration)
+        context_briefing = self._create_simple_context_briefing(entries)
+
+        # Combine snapshot data with briefing
+        snapshot_content = {
+            "snapshot": snapshot_data,
+            "context_briefing": context_briefing,
+            "conversation_id": self._conversation_id,
+        }
+
+        # Store as a SNAPSHOT entry in persistent memory
+        snapshot_entry = MemoryEntry(
+            entry_type=EntryType.SNAPSHOT,
+            content=json.dumps(snapshot_content),
+            metadata={
+                "snapshot_id": f"snapshot_{int(time.time())}",
+                "entry_count": len(entries),
+                "total_tokens": snapshot_data["total_tokens"],
+                "briefing_length": briefing_length,
+            },
+            conversation_id=self._conversation_id,
+        )
+
+        await self._persistent.add(snapshot_entry)
+
+        # Clean up old snapshots
+        await self._cleanup_old_snapshots()
+
+        logger.info(f"Saved working memory snapshot: {snapshot_entry.id}")
+        return snapshot_entry.id
+
+    def _create_simple_context_briefing(self, entries: list[MemoryEntry]) -> dict[str, Any]:
+        """Create a simple context briefing without LLM call.
+
+        Args:
+            entries: Current working memory entries
+
+        Returns:
+            Context briefing dict
+        """
+        if not entries:
+            return {
+                "topic": "No conversation yet",
+                "current_state": "Conversation just started",
+                "discussion_summary": "No previous discussion",
+                "decisions_made": [],
+                "next_steps": [],
+                "open_questions": [],
+            }
+
+        # Extract information from entries
+        user_messages = [e for e in entries if e.metadata.get("role") == "user"]
+
+        # Get recent user message as topic hint
+        recent_user = user_messages[-1].content if user_messages else ""
+
+        return {
+            "topic": recent_user[:100] if len(recent_user) > 100 else recent_user or "Ongoing conversation",
+            "current_state": "In progress" if entries else "Not started",
+            "discussion_summary": f"{len(entries)} messages in working memory. "
+            f"Last: {recent_user[:50]}..." if recent_user else "No messages",
+            "decisions_made": self._extract_decisions(entries),
+            "next_steps": [],  # Would need LLM to populate
+            "open_questions": [],  # Would need LLM to populate
+            "message_count": len(entries),
+            "token_usage": self._working.total_tokens,
+        }
+
+    def _extract_decisions(self, entries: list[MemoryEntry]) -> list[str]:
+        """Extract decisions from entry content.
+
+        Args:
+            entries: Entries to scan for decisions
+
+        Returns:
+            List of decision strings
+        """
+        decisions = []
+        for entry in entries:
+            content = entry.content.lower()
+            if "decision:" in content:
+                # Extract decision text
+                parts = entry.content.split("DECISION:")
+                for part in parts[1:]:
+                    decision = part.strip().split("\n")[0].strip()
+                    if decision:
+                        decisions.append(decision)
+            elif "decided to" in content or "will use" in content:
+                # Simple extraction for common decision phrases
+                decisions.append(entry.content[:100])
+        return decisions[:5]  # Limit to 5 decisions
+
+    async def restore_working_memory_snapshot(
+        self,
+        snapshot_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Restore working memory from a snapshot.
+
+        Args:
+            snapshot_id: Specific snapshot ID to restore. If None, uses latest.
+
+        Returns:
+            The context briefing from the restored snapshot, or None if not found
+
+        Raises:
+            RuntimeError: If Contexo not initialized
+
+        Example:
+            ```python
+            # Restore latest snapshot
+            briefing = await ctx.restore_working_memory_snapshot()
+
+            # Use briefing to inform LLM of conversation state
+            system_prompt = f"Context: {breifing['discussion_summary']}"
+            ```
+        """
+        if not self._initialized:
+            raise RuntimeError("Contexo not initialized")
+
+        # Find the snapshot to restore
+        if snapshot_id:
+            snapshot_entry = await self._persistent.get(snapshot_id)
+            if not snapshot_entry or snapshot_entry.entry_type != EntryType.SNAPSHOT:
+                logger.warning(f"Snapshot {snapshot_id} not found")
+                return None
+        else:
+            # Get latest snapshot for this conversation
+            # Use list_entries instead of search to avoid FTS5 issues with empty query
+            all_entries = await self._persistent._storage.list_entries(
+                collection=self._conversation_id,
+                entry_type=EntryType.SNAPSHOT,
+            )
+            if not all_entries:
+                logger.info("No snapshots found for conversation")
+                return None
+            # Sort by timestamp, get latest
+            snapshot_entry = max(all_entries, key=lambda e: e.timestamp or 0)
+
+        # Parse snapshot data
+        try:
+            snapshot_data = json.loads(snapshot_entry.content)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Failed to parse snapshot data: {e}")
+            return None
+
+        # Get the working memory snapshot
+        working_snapshot = snapshot_data.get("snapshot", {})
+        entry_ids = working_snapshot.get("entry_ids", [])
+
+        # Load entries from persistent storage
+        entries = []
+        for entry_id in entry_ids:
+            entry = await self._persistent.get(entry_id)
+            if entry:
+                entries.append(entry)
+
+        # Restore working memory state
+        await self._working.restore_snapshot(working_snapshot, entries)
+
+        context_briefing = snapshot_data.get("context_briefing", {})
+        logger.info(
+            f"Restored working memory from snapshot: {len(entries)} entries, "
+            f"briefing: {context_briefing.get('topic', 'unknown')}"
+        )
+
+        return context_briefing
+
+    async def _cleanup_old_snapshots(self) -> None:
+        """Remove old snapshots, keeping only the most recent N."""
+        max_snapshots = self._config.snapshot.max_snapshots
+
+        # Get all snapshots for this conversation
+        # Use list_entries instead of search to avoid FTS5 issues with empty query
+        all_entries = await self._persistent._storage.list_entries(
+            collection=self._conversation_id,
+            entry_type=EntryType.SNAPSHOT,
+        )
+        snapshots = sorted(all_entries, key=lambda e: e.timestamp or 0, reverse=True)
+
+        # Delete old snapshots beyond max_snapshots
+        if len(snapshots) > max_snapshots:
+            for old_snapshot in snapshots[max_snapshots:]:
+                await self._persistent.delete(old_snapshot.id)
+                logger.debug(f"Deleted old snapshot: {old_snapshot.id}")
+
+    async def _trigger_auto_snapshot(self) -> None:
+        """Trigger an auto-snapshot if configured.
+
+        This is called after compaction and periodically after message adds.
+        """
+        if not self._config.snapshot.auto_snapshot:
+            return
+
+        try:
+            await self.save_working_memory_snapshot()
+        except Exception as e:
+            logger.warning(f"Failed to save auto-snapshot: {e}")

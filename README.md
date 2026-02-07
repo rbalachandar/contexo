@@ -14,6 +14,7 @@ Contexo is a memory management library that provides a two-tier memory system fo
 - [Features](#features)
 - [Why Contexo](#why-contexo)
 - [LoCoMo Benchmark](#locomo-benchmark)
+- [LongMemEval Benchmark](#longmemeval-benchmark)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
@@ -21,6 +22,7 @@ Contexo is a memory management library that provides a two-tier memory system fo
 - [User Memory](#user-memory)
 - [Storage Backends](#storage-backends)
 - [Sectioned Memory](#sectioned-memory)
+- [Working Memory Snapshots](#working-memory-snapshots)
 - [Compaction Strategies](#compaction-strategies)
 - [Tool Calls](#tool-calls)
 - [LLM Tool Integration](#llm-tool-integration)
@@ -138,6 +140,49 @@ python locomo_eval.py
 ```
 
 **Note**: The evaluation uses a high retrieval limit (200) for maximum accuracy. For production, use the default `RetrievalConfig` settings (`default_limit=10`) for optimal performance.
+
+## LongMemEval Benchmark
+
+Contexo was evaluated on [LongMemEval](https://github.com/xiaowu0162/LongMemEval), which tests long-term interactive memory across 5 core abilities:
+- **Information Extraction** — Finding relevant details from conversation history
+- **Multi-Session Reasoning** — Connecting information across multiple sessions
+- **Knowledge Updates** — Handling evolving information over time
+- **Temporal Reasoning** — Understanding time-based context
+- **Abstention** — Recognizing when information is unavailable
+
+### Performance Summary
+
+Contexo achieves **98.33% evidence recall** on LongMemEval, successfully retrieving relevant context from hundreds of chat sessions.
+
+| Question Type | Recall | Found | Total |
+|---------------|--------|-------|-------|
+| **Multi-session** | 100.00% | 50 | 50 |
+| **Single-session-user** | 97.14% | 68 | 70 |
+| **Overall** | **98.33%** | **118** | **120** |
+
+### Configuration Used
+
+- **Embedding Model**: BAAI/bge-large-en-v1.5 (Sentence Transformers, free/local)
+- **Storage**: SQLite with FTS5 full-text search
+- **Hybrid Search**: Semantic + BM25 + Substring matching
+- **Retrieval Limit**: 50 candidates per query
+
+### Running the Benchmark
+
+```bash
+# Download LongMemEval data
+cd benchmarks/data
+wget https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json
+
+# Run evaluation (uses free local embeddings)
+cd ..
+python longmemeval_eval.py --max-questions=120
+
+# Evaluate all 500 questions
+python longmemeval_eval.py --all
+```
+
+**Note**: LongMemEval tests persistent memory retrieval accuracy — finding relevant information stored across hundreds of historical sessions. This differs from LoCoMo, which tests retrieval within a single long conversation.
 
 ## Alignment with OpenAI's Memory Layers
 
@@ -517,6 +562,51 @@ await ctx.add_message("system", "User likes hiking.", section="rag_context")
 ```
 
 Sections: `system`, `user_profile`, `conversation`, `rag_context`, `tools`
+
+## Working Memory Snapshots
+
+Working memory is in-memory and lost when your application stops. Snapshots preserve the working memory state for crash recovery and conversation resumption.
+
+**What gets saved:**
+- Entry IDs currently in working memory (order preserved)
+- Section assignments (which entries belong to which section)
+- Token counts for each entry
+- LLM-generated context briefing (topic, decisions, next steps)
+
+**When snapshots are saved:**
+
+| Trigger | Description |
+|---------|-------------|
+| **Periodic** | Every N messages (default: 10) |
+| **On close** | Graceful shutdown |
+| **After compaction** | When working memory compresses entries |
+| **Manual** | Call `save_working_memory_snapshot()` anytime |
+
+**Context briefing for LLM continuity:**
+
+When resuming a conversation, the snapshot includes a context briefing that helps the LLM understand:
+- **Topic** — What was being discussed
+- **Current state** — Where the conversation left off
+- **Decisions made** — Key decisions extracted from the conversation
+- **Next steps** — Planned actions (if LLM-generated)
+- **Open questions** — Unresolved topics
+
+**Restoring from snapshot:**
+
+When you call `continue_conversation()`, Contexo automatically:
+1. Looks for the latest snapshot
+2. Restores working memory state (entries, sections, token counts)
+3. Provides the context briefing for LLM context
+4. Falls back to loading recent messages if no snapshot exists
+
+**Configuration:**
+
+Snapshot behavior is configurable via `SnapshotConfig`:
+- Enable/disable auto-snapshot
+- Snapshot interval (every N messages)
+- Maximum snapshots to keep (for rollback)
+- Briefing length (compact, standard, detailed)
+- Debounce delay to prevent excessive snapshots during rapid message bursts
 
 ## Compaction Strategies
 

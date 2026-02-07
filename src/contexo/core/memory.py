@@ -19,6 +19,7 @@ class EntryType(Enum):
     TOOL_RESPONSE = "tool_response"
     SYSTEM = "system"
     SUMMARIZED = "summarized"
+    SNAPSHOT = "snapshot"
 
 
 @dataclass(frozen=True)

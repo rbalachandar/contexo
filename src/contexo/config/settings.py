@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -68,6 +68,32 @@ class RetrievalConfig:
 
 
 @dataclass(frozen=True)
+class SnapshotConfig:
+    """Configuration for working memory snapshots.
+
+    Snapshots preserve working memory state for crash recovery and conversation resumption.
+    Includes LLM-generated context briefing for conversation continuity.
+    """
+
+    # Auto-snapshot settings
+    auto_snapshot: bool = True
+    snapshot_interval: int = 10  # Every N messages
+    snapshot_on_compaction: bool = True  # Snapshot after working memory compacts
+    snapshot_on_close: bool = True  # Snapshot on graceful shutdown
+
+    # Snapshot retention
+    max_snapshots: int = 3  # Keep latest N snapshots
+
+    # LLM briefing settings
+    briefing_length: Literal["compact", "standard", "detailed"] = "standard"
+    # compact: ~100 tokens, standard: ~300 tokens, detailed: ~500+ tokens
+
+    # Debounce delay (seconds) before auto-snapshot after message add
+    # Prevents excessive snapshots during rapid message bursts
+    debounce_delay: float = 5.0
+
+
+@dataclass(frozen=True)
 class ContexoConfig:
     """Main configuration for Contexo.
 
@@ -76,6 +102,7 @@ class ContexoConfig:
         embeddings: Embedding provider configuration
         working_memory: Working memory configuration
         retrieval: Retrieval/hybrid search configuration
+        snapshot: Working memory snapshot configuration
         auto_initialize: Whether to auto-initialize on creation
         enable_provenance: Whether to track provenance
         conversation_id: Default conversation ID for entries
@@ -86,6 +113,7 @@ class ContexoConfig:
     embeddings: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     working_memory: WorkingMemoryConfig = field(default_factory=WorkingMemoryConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
+    snapshot: SnapshotConfig = field(default_factory=SnapshotConfig)
     auto_initialize: bool = True
     enable_provenance: bool = False
     conversation_id: str | None = None
