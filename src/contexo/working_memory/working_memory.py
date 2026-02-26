@@ -351,7 +351,18 @@ class WorkingMemory(MemoryManager):
         ]
 
         # Evict oldest entries from this section
-        to_evict = section_entries[: required_tokens // 50 + 1]  # Rough estimate
+        # Calculate actual entries needed to free required tokens
+        tokens_freed = 0
+        to_evict = []
+        for entry in section_entries:
+            if tokens_freed >= required_tokens:
+                break
+            to_evict.append(entry)
+            tokens_freed += entry.token_count
+
+        # If we couldn't free enough tokens, evict all section entries
+        if tokens_freed < required_tokens and to_evict != section_entries:
+            to_evict = section_entries
 
         for entry in to_evict:
             self._context_window.remove(entry.id)
